@@ -1,0 +1,56 @@
+---
+import Base from '../../layouts/Base.astro';
+import { loadWriteups } from '../../lib/entries';
+
+const { standalone, appendices } = await loadWriteups();
+---
+
+<Base
+  title="Writeups — Ahmed Abdalrhman"
+  description="Ten lab writeups: web application and network exploitation notes, written up step by step."
+>
+  <h1>Writeups</h1>
+
+  <p>
+    {standalone.length} writeups from self-directed lab work, plus
+    {appendices.length === 1 ? ' one appendix' : ` ${appendices.length} appendices`} kept with
+    the writeup they belong to. Difficulty and vulnerability class are taken
+    straight from the front matter of each file.
+  </p>
+
+  <ul class="entrylist">
+    {
+      standalone.map((entry) => (
+        <li>
+          <div class="entrylist__head">
+            <h2 class="entrylist__title">
+              <a href={`/writeups/${entry.id}/`}>{entry.data.title}</a>
+            </h2>
+            <span class="tag">{entry.data.difficulty}</span>
+          </div>
+          <p class="entrylist__meta">
+            {entry.data.platform ?? 'lab'} &middot; {entry.data.room}
+          </p>
+          {entry.data.vulnClass && <p class="entrylist__classes">{entry.data.vulnClass}</p>}
+        </li>
+      ))
+    }
+  </ul>
+
+  <h2>Appendices</h2>
+  <ul class="entrylist">
+    {
+      appendices.map((entry) => (
+        <li>
+          <div class="entrylist__head">
+            <h3 class="entrylist__title">
+              <a href={`/writeups/${entry.id}/`}>{entry.data.title}</a>
+            </h3>
+            <span class="tag">appendix</span>
+          </div>
+          <p class="entrylist__meta">Belongs to the writeup it is linked from.</p>
+        </li>
+      ))
+    }
+  </ul>
+</Base>

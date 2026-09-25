@@ -1,0 +1,72 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  wide?: boolean;
+}
+
+const {
+  title,
+  description = 'Field notes from a junior penetration tester: web application and network lab work, written up step by step.',
+  wide = false,
+} = Astro.props;
+
+const path = Astro.url.pathname;
+const nav = [
+  { href: '/', label: 'Index' },
+  { href: '/writeups/', label: 'Writeups' },
+  { href: '/about', label: 'About' },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={new URL(path, Astro.site)} />
+  </head>
+  <body>
+    <div class:list={['shell', wide && 'shell--wide']}>
+      <header class="masthead">
+        <div class="masthead__row">
+          <a class="masthead__name" href="/">Ahmed Abdalrhman &mdash; alzeaty</a>
+          <nav class="masthead__nav" aria-label="Primary">
+            {
+              nav.map((item) => (
+                <a
+                  href={item.href}
+                  aria-current={
+                    item.href === '/'
+                      ? path === '/' || path === ''
+                        ? 'page'
+                        : undefined
+                      : path.startsWith(item.href)
+                        ? 'page'
+                        : undefined
+                  }
+                >
+                  {item.label}
+                </a>
+              ))
+            }
+          </nav>
+        </div>
+      </header>
+
+      <main>
+        <slot />
+      </main>
+
+      <footer class="colophon">
+        <span>Field notes &mdash; written up from self-directed lab work.</span>
+        <span>Set in Newsreader and JetBrains Mono.</span>
+      </footer>
+    </div>
+  </body>
+</html>

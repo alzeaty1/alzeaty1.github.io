@@ -1,0 +1,64 @@
+---
+import Base from '../layouts/Base.astro';
+import { loadWriteups } from '../lib/entries';
+
+const { standalone, appendices } = await loadWriteups();
+---
+
+<Base
+  title="About — Ahmed Abdalrhman"
+  description="Junior penetration tester. Web application and network lab work, written up step by step."
+>
+  <h1>About</h1>
+
+  <p>
+    I am a junior penetration tester working on web applications and networks.
+    I study by breaking lab machines on my own time &mdash; mostly TryHackMe rooms
+    and the PortSwigger Web Security Academy &mdash; and I write up each one
+    while it is still fresh.
+  </p>
+
+  <p>
+    The writeups here are lab notes, not client reports. They follow the order I
+    actually worked in: what I observed, what I did, what came back, and what I
+    would take from it next time. Where a step was not recorded while I was
+    solving, the note says so instead of filling the gap in.
+  </p>
+
+  <p>
+    Before security I did IT and network engineering at Al Nour Tech from 2019
+    to 2021, then freelance web development until 2023. The security work grew
+    out of that: I had been the person wiring up the networks and shipping the
+    web apps, and then I wanted to know where they broke.
+  </p>
+
+  <h2>What is here</h2>
+  <ul>
+    <li>{standalone.length} writeups, from exposed version control to cloud credential abuse.</li>
+    <li>
+      {appendices.length} appendix entry {appendices.length === 1 ? '' : 'entries'} kept with the
+      writeup it belongs to.
+    </li>
+    <li>Four sanitized Python helper scripts, linked from the writeups that used them.</li>
+  </ul>
+
+  <h2>Elsewhere</h2>
+  <ul class="linklist">
+    <li>
+      <span class="linklist__key">Email</span>
+      <span class="linklist__val"><a href="mailto:ahmedabdalrhman838@gmail.com">ahmedabdalrhman838@gmail.com</a></span>
+    </li>
+    <li>
+      <span class="linklist__key">GitHub</span>
+      <span class="linklist__val"><a href="https://github.com/alzeaty1">github.com/alzeaty1</a></span>
+    </li>
+    <li>
+      <span class="linklist__key">TryHackMe</span>
+      <span class="linklist__val"><a href="https://tryhackme.com/p/ALZeaty">tryhackme.com/p/ALZeaty</a></span>
+    </li>
+    <li>
+      <span class="linklist__key">LinkedIn</span>
+      <span class="linklist__val"><a href="https://linkedin.com/in/ahmed-abdalrhman838">linkedin.com/in/ahmed-abdalrhman838</a></span>
+    </li>
+  </ul>
+</Base>

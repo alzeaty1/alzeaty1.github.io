@@ -1,0 +1,115 @@
+---
+import { render } from 'astro:content';
+import Base from '../../layouts/Base.astro';
+import { loadWriteups, appendicesFor, scriptsFor } from '../../lib/entries';
+
+export async function getStaticPaths() {
+  const { all } = await loadWriteups();
+  return all.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+
+const { all, appendices } = await loadWriteups();
+const position = all.findIndex((e) => e.id === entry.id);
+const prev = position > 0 ? all[position - 1] : undefined;
+const next = position < all.length - 1 ? all[position + 1] : undefined;
+
+const isAppendix = entry.data.appendix === true;
+const parentSlug = (entry.data.parent ?? '').replace(/^\//, '');
+const parent = all.find((e) => e.id === parentSlug);
+const children = appendicesFor(entry.id, appendices);
+const scripts = scriptsFor(entry.id);
+---
+
+<Base title={`${entry.data.title} — Ahmed Abdalrhman`} description={entry.data.vulnClass ?? entry.data.title} wide>
+  <article>
+    <header class="writeup__head">
+      {
+        isAppendix && parent && (
+          <p class="entrylist__meta">
+            Appendix to <a href={`/writeups/${parent.id}/`}>{parent.data.title}</a>
+          </p>
+        )
+      }
+      <h1>{entry.data.title}</h1>
+
+      <dl class="metastrip">
+        {
+          !isAppendix && (
+            <div>
+              <dt>Room</dt>
+              <dd>{entry.data.room}</dd>
+            </div>
+          )
+        }
+        {
+          !isAppendix && (
+            <div>
+              <dt>Difficulty</dt>
+              <dd>{entry.data.difficulty}</dd>
+            </div>
+          )
+        }
+        {
+          entry.data.vulnClass && (
+            <div>
+              <dt>Class</dt>
+              <dd>{entry.data.vulnClass}</dd>
+            </div>
+          )
+        }
+        {
+          entry.data.dateSolved && (
+            <div>
+              <dt>Solved</dt>
+              <dd>{entry.data.dateSolved.toISOString().slice(0, 10)}</dd>
+            </div>
+          )
+        }
+      </dl>
+    </header>
+
+    <div class="prose">
+      <Content />
+    </div>
+
+    {
+      children.length > 0 && (
+        <aside class="appendix-link">
+          {children.length === 1 ? 'Appendix' : 'Appendices'}:{' '}
+          {children.map((child, i) => (
+            <>
+              {i > 0 && ', '}
+              <a href={`/writeups/${child.id}/`}>{child.data.title}</a>
+            </>
+          ))}
+        </aside>
+      )
+    }
+
+    {
+      scripts.length > 0 && (
+        <section class="section">
+          <p class="section__label">Scripts used</p>
+          <ul class="scripts">
+            {scripts.map((s) => (
+              <li>
+                <a class="filelink" href={s.href}>
+                  {s.href}
+                </a>{' '}
+                &mdash; {s.note}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+  </article>
+
+  <nav class="pager" aria-label="Writeup navigation">
+    {prev ? <a href={`/writeups/${prev.id}/`}>&larr; {prev.data.title}</a> : <span />}
+    {next ? <a href={`/writeups/${next.id}/`}>{next.data.title} &rarr;</a> : <span />}
+  </nav>
+</Base>

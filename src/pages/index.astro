@@ -1,0 +1,149 @@
+---
+import Base from '../layouts/Base.astro';
+import { loadWriteups } from '../lib/entries';
+
+const { standalone, appendices } = await loadWriteups();
+
+const preview = standalone.slice(0, 4);
+const appendixCount = appendices.length;
+
+const proof = [
+  {
+    title: 'NTI / NTRA Cybersecurity Academy',
+    body: 'National Telecom Institute, Ministry of Communications.',
+  },
+  {
+    title: 'TryHackMe Advent of Cyber 2025',
+    body: '24 challenges completed. Certificate ID THM-I1Q2HMQIIO.',
+  },
+  {
+    title: 'PortSwigger Web Security Academy',
+    body: 'All Access Control and Authentication labs.',
+  },
+];
+
+const contact = [
+  { key: 'Email', value: 'ahmedabdalrhman838@gmail.com', href: 'mailto:ahmedabdalrhman838@gmail.com' },
+  { key: 'GitHub', value: 'github.com/alzeaty1', href: 'https://github.com/alzeaty1' },
+  { key: 'TryHackMe', value: 'tryhackme.com/p/ALZeaty', href: 'https://tryhackme.com/p/ALZeaty' },
+  { key: 'LinkedIn', value: 'linkedin.com/in/ahmed-abdalrhman838', href: 'https://linkedin.com/in/ahmed-abdalrhman838' },
+];
+---
+
+<Base title="Ahmed Abdalrhman — field notes" description="Field notes from a junior penetration tester: web application and network lab work, written up step by step.">
+  <section class="engagement">
+    <dl class="engagement__table">
+      <div>
+        <dt>TARGET</dt>
+        <dd>alzeaty1</dd>
+      </div>
+      <div>
+        <dt>SCOPE</dt>
+        <dd>web applications &middot; networks &middot; recon</dd>
+      </div>
+      <div>
+        <dt>POSTURE</dt>
+        <dd>junior, actively hunting</dd>
+      </div>
+      <div>
+        <dt>STATUS</dt>
+        <dd>[ <span class="engagement__flag">&#9679; open to opportunities</span> ]</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="section">
+    <p class="section__label">Position</p>
+    <p class="statement">
+      I am a junior penetration tester. I work through self-directed lab machines
+      &mdash; TryHackMe rooms, PortSwigger Academy &mdash; and write up what I find
+      step by step so I can reread it later.
+    </p>
+    <p class="statement">
+      My focus is web application and network work: authentication and access
+      control flaws, injection, exposed cloud credentials, and traffic analysis.
+    </p>
+  </section>
+
+  <section class="section">
+    <p class="section__label">Proof</p>
+    <ul class="ledger">
+      {
+        proof.map((item, i) => (
+          <li>
+            <span class="ledger__index">{String(i + 1).padStart(2, '0')}</span>
+            <span class="ledger__body">
+              <span class="ledger__title">{item.title}</span>
+              <p>{item.body}</p>
+            </span>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <section class="section">
+    <p class="section__label">Background</p>
+    <p class="backline">Al Nour Tech, 2019&ndash;2021 &mdash; IT and network engineering.</p>
+    <p class="backline">Freelance web development, 2021&ndash;2023. The security work came out of that.</p>
+  </section>
+
+  <section class="section">
+    <p class="section__label">Writeups</p>
+    <ul class="entrylist">
+      {
+        preview.map((entry) => (
+          <li>
+            <div class="entrylist__head">
+              <h2 class="entrylist__title">
+                <a href={`/writeups/${entry.id}/`}>{entry.data.title}</a>
+              </h2>
+              <span class="tag">{entry.data.difficulty}</span>
+            </div>
+          </li>
+        ))
+      }
+    </ul>
+    <p>
+      <a href="/writeups/">All {standalone.length} writeups{appendixCount ? `, plus ${appendixCount} appendix` : ''}</a>
+    </p>
+  </section>
+
+  <section class="section">
+    <p class="section__label">Tool</p>
+    <p>
+      <strong>ctf-crypto-analysis-tool</strong> &mdash;
+      <a href="https://github.com/alzeaty1/ctf-crypto-analysis-tool">github.com/alzeaty1/ctf-crypto-analysis-tool</a>.
+      A modular crypto analysis CLI with a plugin registry, a pytest suite, MIT
+      licensed. It covers XOR analysis (known-key, single-byte brute force, and
+      repeating-key recovery via column scoring with beam search), entropy and
+      English-language scoring, and ECB repeated-block detection. One cipher
+      family is implemented so far; the rest of the registry is scaffolding.
+    </p>
+  </section>
+
+  <section class="section">
+    <p class="section__label">Notes</p>
+    <p>
+      A separate set of reading notes on other people&rsquo;s published bug bounty
+      writeups &mdash; what they did, what I would try differently. These are
+      notes on other authors&rsquo; findings, not my own.
+    </p>
+  </section>
+
+  <section class="section">
+    <p class="section__label">Contact</p>
+    <ul class="linklist">
+      {
+        contact.map((item) => (
+          <li>
+            <span class="linklist__key">{item.key}</span>
+            <span class="linklist__val">
+              <a href={item.href}>{item.value}</a>
+            </span>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+</Base>
