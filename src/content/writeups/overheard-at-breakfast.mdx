@@ -1,0 +1,119 @@
+---
+title: "Overheard at Breakfast — OSINT Email-to-Hash Mapping Against Gravatar's Public API"
+room: Overheard at Breakfast
+difficulty: easy
+platform: TryHackMe
+vulnClass: "OSINT, Social Media Analysis, Email Hashing (MD5), Third-Party Profile Enumeration, Base64 Decoding"
+spoilerFree: false
+---
+
+## Observation
+
+"Overheard at Breakfast" is an OSINT challenge in the **Hacker Holidays** series at the Byte Lotus Hotel. The challenge presents a single screenshot (`conversation.png`) representing a leaked chat between two hotel guests, **Ponzi** and **Lambo**.
+
+By analyzing the conversation text, two key identifiers were extracted:
+1. An explicit email address (redacted for publication — a real third party's address).
+2. A contextual clue pointing to a free profile/avatar linking service starting with "G" (**Gravatar**).
+
+Rather than relying on web-search shortcuts or third-party email checkers, this was a programmatic OSINT investigation: convert the normalized email address to its **MD5 hash**, then query Gravatar's public REST API (`https://gravatar.com/<hash>.json`) directly to expose the hidden profile and retrieve the Base64-encoded flag.
+
+## Action
+
+### 1. Information gathering and clue extraction
+
+Analyzing `conversation.png`, the chat history between `Ponzi - Influencer L3AK` and `Lambo!` was read. Key excerpts from Lambo:
+
+> *"Though I'm still out there, I used to use this free tool that let me upload my profile and link other media accounts was neat, until I wiped everything. Started with a Gif if I remember correctly."*
+> *"But if anything this is my best way of communication: [REDACTED EMAIL]"*
+
+**Identified clues:**
+- **Email address:** `[REDACTED EMAIL]` (a real individual's address, withheld from publication along with its derived hash).
+- **Target platform:** a profile platform connecting identities across web services starting with "G" (**Gravatar** — *Globally Recognized Avatar*).
+
+### 2. Technical investigation (email-to-identity mapping)
+
+**Gravatar's identity mapping.** Gravatar maps user email addresses to profile identifiers using cryptographic hashing. This lets external sites request avatar images and public profile data without ever putting a raw email address in a public URL.
+
+The hashing specification requires normalizing the email address:
+1. Strip leading and trailing whitespace (`trim`).
+2. Convert all characters to lowercase (`lowercase`).
+3. Compute the **MD5 hash** (or SHA-256 for newer integrations) of the normalized string.
+
+**Programmatic hash calculation.** Normalizing the address and computing its MD5 hash:
+
+```python
+import hashlib
+
+email = "[REDACTED EMAIL]".strip().lower()
+hash_val = hashlib.md5(email.encode('utf-8')).hexdigest()
+print(f"MD5 Hash: {hash_val}")
+# Output: [REDACTED HASH]
+```
+
+### 3. Querying Gravatar's public REST API
+
+With the calculated hash `[REDACTED HASH]`, Gravatar's JSON API endpoint was queried directly:
+
+`https://gravatar.com/[REDACTED HASH].json`
+
+**API response received:**
+
+```json
+{
+  "entry": [
+    {
+      "hash": "[REDACTED HASH]",
+      "profileUrl": "https://gravatar.com/cheerfullysongf28e3c3716",
+      "preferredUsername": "cheerfullysongf28e3c3716",
+      "displayName": "Lambo",
+      "aboutMe": "Funny thing about email hashes, they follow you places you didn't expect. Glad you found the right corner of the internet! Here is your prize: VEhNe1MzY3JlVF9QcjBmaWwzX0g0c19iMzNuX0lkZW50MWZpM2R9",
+      "currentLocation": "Byte Lotus Hotel"
+    }
+  ]
+}
+```
+
+### 4. Flag decoding
+
+The `aboutMe` field contained the prize payload encoded in Base64:
+`VEhNe1MzY3JlVF9QcjBmaWwzX0g0c19iMzNuX0lkZW50MWZpM2R9`
+
+Decoding the Base64 payload using Python / the terminal:
+
+```python
+import base64
+
+payload = "VEhNe1MzY3JlVF9QcjBmaWwzX0g0c19iMzNuX0lkZW50MWZpM2R9"
+flag = base64.b64decode(payload).decode('utf-8')
+print("Decoded Flag:", flag)
+```
+
+> **Final flag:** `[FLAG CAPTURED]`
+
+## Result
+
+The chain completed end to end: screenshot → email address → normalized MD5 hash → Gravatar REST API → `aboutMe` Base64 blob → decoded flag.
+
+| Step | Artifact |
+|:---|:---|
+| Screenshot clue | "Started with a Gif" → Gravatar |
+| Screenshot clue | Direct email address → `[REDACTED EMAIL]` |
+| Normalization | `strip().lower()` then MD5 |
+| Hash | `[REDACTED HASH]` (derived from a real address — withheld) |
+| API hit | `entry[0].displayName` = `Lambo`, `currentLocation` = `Byte Lotus Hotel` |
+| Flag | `aboutMe` Base64 decoded → `[FLAG CAPTURED]` |
+
+## Takeaway
+
+**Email hashes are identifiers, not anonymizers.** A cryptographic hash (MD5/SHA256) derived from a known email address is a deterministic identifier. Anyone who knows the address can compute the hash and query services like Gravatar for linked public profiles. Hashing changes the *representation*, never the *access*.
+
+**API versus GUI enumeration.** Web tools like Gravatar's Email Checker exist, but querying the REST endpoint directly returns structured JSON containing every profile field (`preferredUsername`, `aboutMe`, `currentLocation`) in a single request — no scraping, no rendering.
+
+**Normalization decides success or a false negative.** Failing to lowercase the address or to strip whitespace produces an entirely different hash, and the API then answers `User Not Found`. That negative result is indistinguishable from "this person has no profile" unless you know the normalization rule.
+
+**A free tool is still an identifier broker.** Lambo's own message is the lesson: the moment you link media accounts to one email-based profile, you have published a join key that anyone can pivot from.
+
+### Notes
+
+- Category: OSINT / Social Media / Hashing.
+- The email address, its MD5 hash, and the flag are redacted for publication. The Gravatar profile handle and Base64 encoding are reproduced as they appeared in the source writeup; the decoded flag is withheld.

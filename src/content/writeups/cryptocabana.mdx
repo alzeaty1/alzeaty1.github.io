@@ -1,0 +1,69 @@
+---
+title: CryptoCabana — Azure Blob SAS token abuse to Key Vault secret rotation
+room: CryptoCabana
+difficulty: medium
+platform: TryHackMe
+vulnClass: exposed cloud credentials, Azure Blob Storage SAS token, service principal abuse, Azure Key Vault, secret rotation
+spoilerFree: false
+---
+
+**Series:** Hacker Holidays · The Byte Lotus Hotel
+**Points:** 90
+
+> **Note on completeness:** these notes are a condensed technical summary — a list of steps, not a narrative. No per-step commands, no output, and no screenshots were recorded while solving this room. Each step below is stated as it appears in the notes. Where a step is not supported by anything in them, it is marked `[VERIFY — not documented in source]` rather than filled in. Nothing here is invented.
+
+## Observation
+
+The kiosk's JavaScript front end (`app.js`) was readable — no authentication, no interaction — and it shipped a **Storage Account name plus a SAS token** to the browser.
+
+The SAS parameters recorded in the notes:
+
+- `sp=rl` — read + list
+- `srt=sco` — scoped service, container, object operations
+
+## Action
+
+The nine steps recorded in the notes, in order.
+
+**1.** The kiosk's `app.js` exposed the Storage Account + SAS token. No login, no interaction — the credentials were in a file the browser downloads by design.
+
+**2.** The SAS carried `sp=rl` + `srt=sco`, which allows listing every container.
+
+**3.** The containers were `$web` (the site), `backups` (a decoy), and `vault`.
+
+**4.** Inside `vault`: `backup-service-account.json` and `seed_phrase.txt`.
+
+**5.** The service account file contained `client_id`, `client_secret`, and `key_vault_uri`.
+
+`[VERIFY — not documented in source]` The notes record which fields were present, not their values, and not the file's access condition.
+
+**6.** `az login` as that service principal → Key Vault access.
+
+**7.** The vault held 3 shards + a `master-key`; the `master-key` returned 403.
+
+**8.** `key-shard-2` had been rotated → the old value remained in an older version still present in the vault.
+
+`[VERIFY — not documented in source]` The command used to enumerate versions (e.g. `az keyvault secret list-versions`) and the version id that returned the previous `key-shard-2` value are not recorded in the notes.
+
+**9.** Assembling the shards produced the flag.
+
+`[VERIFY — not documented in source]` The notes state only "assembling shards → the flag". The assembly mechanism — direct concatenation, decode, or a stated order — is not recorded, and no shard values are reproduced here.
+
+## Result
+
+Three shards were retrieved and assembled to yield the room flag.
+
+```
+[FLAG CAPTURED]
+```
+
+The flag value is withheld from this page. A note in the original writeup claimed the flag had been masked; that was inaccurate — the real flag was present in the file and is now deliberately redacted.
+
+## Takeaway
+
+These lessons are the author's own, as recorded in the notes:
+
+- **A SAS token in client-side JavaScript is a storage credential, not a session token.** Check `sp=` and `srt=` — `l` (list) is what turns a leak into enumeration.
+- **Secret rotation is not cleanup.** Key Vault does not delete on rotation; it adds a version and keeps the previous ones. A secret rotated *because* it leaked may still be readable through version history.
+- **The `master-key` returning 403 was a decoy.** The shards were the path.
+- **The chain:** storage account → SAS → service principal → Key Vault → old version. *Not your keys, not your coins.*

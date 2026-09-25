@@ -1,0 +1,368 @@
+---
+title: "SQL Injection (THM) — four oracles, one endpoint"
+room: "SQL Injection (THM Practical)"
+difficulty: easy
+platform: TryHackMe
+vulnClass: "SQL Injection, UNION-based, Authentication Bypass, Boolean Blind, Time-based Blind"
+dateSolved: 2026-09-02
+spoilerFree: false
+---
+
+## Observation
+
+TryHackMe's "SQL Injection" practical room exposes four training levels behind what look like four different vulnerable applications. They are not. Reading the page source instead of just clicking the UI revealed that every level has a `/run` endpoint taking a `level` and a `sql` parameter, with a consistent response shape:
+
+```json
+{
+  "sql": true,                 // query was accepted
+  "error": false,              // query executed without DB error
+  "message": "...",            // human-readable text / "OK" / error text
+  "results": [...],            // rows (when applicable)
+  "time": 0.006                // only present in Level 4 — server-side timing
+}
+```
+
+That single endpoint is the entire game. Each level hides the real injection point behind a fake browser UI, but the backend always reads from `POST /run` with the same shape.
+
+| Level | Visible injection | Real endpoint | Oracle |
+|-------|-------------------|---------------|--------|
+| 1 | `?id=` in URL bar | `POST /run` (`level=1`) | Visible result rows |
+| 2 | Username / password fields | `POST /run` (`level=2`) | Boolean (rows returned?) |
+| 3 | `?username=` in URL bar | `POST /run` (`level=3`) | Boolean (`true`/`false` in JSON) |
+| 4 | `?referrer=` in URL bar | `POST /run` (`level=4`) | Timing (`time` field) |
+
+The teaching point that frames the whole room: every "blind" technique here still has a real oracle. Levels 2–4 are called "blind" because the page UI hides the data, not because the attacker has no feedback.
+
+## Action
+
+### Level 1 — Union-based / in-band
+
+**Goal:** find martin's password and submit it to the answer form. The first flag is on Level 2's page once you clear Level 1.
+
+The UI pretends to be `https://website.thm/article?id=1`, but the network request is:
+
+```
+POST /run
+Content-Type: application/x-www-form-urlencoded
+
+level=1&sql=select * from article where id = 1
+```
+
+Server reply when id=1:
+
+```json
+{
+  "sql": true,
+  "error": false,
+  "message": "Perfecto",
+  "results": [{"id": "1", "subject": "My First Article", "content": "Hi and welcome..."}]
+}
+```
+
+The injection point is the integer after `id = `. Three columns are visible per row: `id`, `subject`, `content`.
+
+**Step 1 — confirm injection.** Appending a single quote closes the string, but the backend is integer-injection, so the walkthrough went straight to `UNION SELECT` with a marker payload:
+
+```
+sql=select * from article where id = 1 UNION SELECT 1
+```
+
+Result: `SQLSTATE[21000]: Cardinality violation: 1222 The used SELECT statements have a different number of columns`.
+
+That error is exactly what is wanted. UNION requires the same number of columns on both sides, and the server is telling us the two SELECTs disagree. Bumping the UNION side by one column each time:
+
+```
+UNION SELECT 1     →  error  (1 vs N)
+UNION SELECT 1,2   →  error  (2 vs N)
+UNION SELECT 1,2,3 →  ok     (3 = N)
+```
+
+Three columns. The `subject` column is the one rendered into the page, so that is where the extracted values should land.
+
+**Step 2 — null out the real row.** If the original row is non-empty, the legitimate article fills the page and the UNION row gets pushed below it. Setting `id = 0` (or any number that has no match) returns no real article, so the injected row becomes the only content on the page:
+
+```
+sql=select * from article where id = 0 UNION SELECT 1,database(),3
+```
+
+Response row: `subject: "sqli_one"`. The current database is `sqli_one`.
+
+**Step 3 — list tables.** Every modern SQL engine keeps a metadata catalog. MySQL's is `information_schema`. Pulling the table names that live in the current database:
+
+```sql
+SELECT 1, group_concat(table_name), 3
+FROM   information_schema.tables
+WHERE  table_schema = 'sqli_one'
+```
+
+The result row shows two tables: `article` and `staff_users`. The interesting one is `staff_users` — the credentials table.
+
+**Step 4 — list columns of staff_users.** Same idea, this time against `information_schema.columns`:
+
+```sql
+SELECT 1, group_concat(column_name), 3
+FROM   information_schema.columns
+WHERE  table_name = 'staff_users'
+```
+
+Columns: `id`, `username`, `password`. That is everything needed.
+
+**Step 5 — dump credentials.**
+
+```sql
+SELECT 1,
+       group_concat(username, ':', password SEPARATOR '<br>'),
+       3
+FROM   staff_users
+```
+
+`group_concat` collapses the whole table into one string. `<br>` keeps the rows visually separated on the page (and inside the JSON). Three users fall out: `admin`, `martin`, `jim`.
+
+> Note: martin's password contains `$`. URL-encoding it (`%24%24`) is required; otherwise the form body parser eats the second `$` as a shell variable on the server side and the login fails.
+
+Submitting martin's password through the form returns `{"pass": true}` and Level 2 unlocks.
+
+**What this level taught:**
+
+- `UNION SELECT` is the fastest SQLi technique when the app actually shows you the rows. Three sub-steps: column count → visible column → enumerate.
+- `group_concat` is the trick that makes multiple rows fit into one output cell, which is what union-based extraction needs to be practical.
+- `information_schema` is the universal "where is everything" catalog in MySQL/MariaDB/Postgres-ish databases. Memorize the `tables` and `columns` views.
+
+### Level 2 — Authentication bypass
+
+**Goal:** log in as any user without knowing the password. The flag is on Level 3's page once you are logged in.
+
+**What the app actually does.** The login form builds the query in JavaScript before sending it. Reading the source:
+
+```js
+let qry = "select * from users where username='" + username + "' and password='" + password + "' LIMIT 1;";
+```
+
+The backend only sees one query. The app's own logic just checks "did the query return at least one row?" — there is no second check, no password hash comparison, nothing. The login is gated entirely by the SQL query returning a row.
+
+**The bypass.** The classic OR-1=1 with a comment tail:
+
+```
+username: ' OR 1=1;--
+password: anything
+```
+
+What the backend actually executes:
+
+```sql
+SELECT * FROM users WHERE username='' OR 1=1;--' AND password='anything' LIMIT 1;
+```
+
+Walking through it:
+
+- `username=''` matches no row.
+- `OR 1=1` is always true, so the whole WHERE is true.
+- `;` ends the statement.
+- `--` comments out the rest of the line, including the `AND password=...` check.
+- The query returns every row, the app takes the first one, and you are logged in.
+
+The password field is irrelevant. The `--` removes it from the query before the database ever evaluates it.
+
+**What this level taught:**
+
+- Authentication built on a single SQL query with no separate password verification is broken by definition. The fix is not "use prepared statements for the password" — the fix is "stop trusting SQL as the authentication primitive."
+- `OR 1=1` is the most famous SQLi payload, but `OR '1'='1'` and `OR 1#` (MySQL `#` comment) are equally common. Anything that makes the WHERE unconditionally true plus a comment to swallow the trailing check works.
+- The `LIMIT 1` does not protect you here. The app just takes the first row, and the first row after `OR 1=1` is whoever happens to be first in the table.
+
+### Level 3 — Boolean-based blind
+
+**Goal:** enumerate `database()`, then `users.username` and `users.password` for the admin row, then log in. The flag is on Level 4's page.
+
+**What changed compared to Level 1/2.** The `checkuser?username=` UI shows only `{"taken": true}` or `{"taken": false}`. There is no data, no error text, no rows in the response. That binary signal is the entire oracle.
+
+The app's query:
+
+```sql
+SELECT * FROM users WHERE username = '<input>' LIMIT 1
+```
+
+The trick: replace the username with a value that never exists, then UNION a controlled row whose existence is gated on a boolean condition.
+
+**Step 1 — confirm injection and column count.**
+
+```
+admin123' UNION SELECT 1,2,3 WHERE database() LIKE '%';-- 
+```
+
+Response: `error: false, message: "true"`. The `LIKE '%'` matches everything, so the condition is true, the row exists, and the app reports `taken: true`. Injection confirmed. Same three columns as Level 1.
+
+Trying `LIKE 'a%'` flips the response to `error: true, message: "false"` — the condition is false and the oracle is working.
+
+**Step 2 — extract the database name, letter by letter.** Each request asks "is the Nth character of the database name equal to X?"
+
+```
+database() LIKE 'a%'   →  false
+database() LIKE 'b%'   →  false
+...
+database() LIKE 's%'   →  true   ← first letter is s
+database() LIKE 'sa%'  →  false
+database() LIKE 'sq%'  →  true
+...
+```
+
+Eventually `database() LIKE 'sqli_three'` returns true with no wildcard at all, which is the "we have the full name" signal.
+
+**Step 3 — list tables, then columns, then row data.** Same exact pattern, just retargeted:
+
+```sql
+-- find table names
+SELECT 1,2,3 FROM information_schema.tables
+WHERE table_schema='sqli_three' AND table_name LIKE 'u%'
+
+-- find column names of that table
+SELECT 1,2,3 FROM information_schema.columns
+WHERE table_name='users' AND column_name LIKE 'u%'
+
+-- find the username
+SELECT 1,2,3 FROM users WHERE username LIKE 'a%'
+
+-- find the password for that user
+SELECT 1,2,3 FROM users WHERE username='admin' AND password LIKE '3%'
+```
+
+Each `LIKE 'x%'` is one HTTP request. For a four-digit numeric password this is forty attempts worst case (10 digits × 4 positions + a few recon probes). For a longer alphabetic password it would be hundreds of requests. That is the real cost of boolean blind — linear in the value length times the charset size.
+
+**What this level taught:**
+
+- Boolean blind works whenever you have a single yes/no oracle. The `LIKE 'prefix%'` approach is the cleanest because it answers the question "does the next character exist in the set" in one query.
+- The trailing `;--` is the part that drops the `LIMIT 1` and the closing quote. Forget the comment and you get a syntax error and the oracle dies for that request.
+- A linear scan over a charset of ~36 characters is fine for one value. For multi-row extraction on a real target, you switch to binary search on ASCII values, which is `log2(95) ≈ 7` requests per character instead of 47.
+
+### Level 4 — Time-based blind
+
+**Goal:** same as Level 3, but the response body is identical whether the condition is true or false. The only oracle is how long the response takes to come back.
+
+**What the app does.** The "analytics" page shows the user's URL change in a fake address bar. The JavaScript builds:
+
+```js
+let qry = "select * from analytics_referrers where domain='" + str + "' LIMIT 1";
+```
+
+Same `/run` endpoint. Same SQL injection mechanic. New oracle.
+
+**The gift the dev left in production.** Response shape:
+
+```json
+{"sql": true, "error": false, "message": "OK", "time": 0.006, "results": []}
+```
+
+That `time` field is server-measured execution time, returned to the client. In a real production app that would be a bug — the dev basically shipped an oracle instead of hiding it. Network-only timing would have been the harder version.
+
+**Step 1 — find the column count with a timing probe.** The standard column-count test (`UNION SELECT 1`, `UNION SELECT 1,2`, ...) is unhelpful here because wrong column counts fail with an error but the timing is the same fast value either way. Instead, attach `SLEEP(5)` to the UNION and the delay only happens when the column count is correct.
+
+```
+UNION SELECT SLEEP(5)            →  0.001s  (wrong column count, SLEEP did not run)
+UNION SELECT SLEEP(5),2          →  5.002s  (two columns, sleep ran)
+```
+
+Two columns. The fact that the sleep ran at all is also the injection confirmation.
+
+**Step 2 — establish the timing threshold.** A baseline request (`domain='x'`) returns in roughly 6ms. A `SLEEP(2)` request returns in 2002ms. There is no ambiguity. A condition-true request will sit through the sleep; a condition-false request returns immediately. Anything in the database with `IF(condition, SLEEP(2), 0)` is enough:
+
+```sql
+SELECT IF(<condition>, SLEEP(2), 0), 2 ...
+```
+
+Or, with the boolean-blind trick from Level 3 inlined into a UNION:
+
+```sql
+SELECT SLEEP(2), 2 FROM users
+WHERE  username='admin' AND password LIKE '4%'
+```
+
+If the condition is true the FROM row exists, the sleep runs, you see ~2s. If the condition is false the FROM row does not exist, the sleep never runs, you see ~10ms.
+
+**Step 3 — extract the admin password.** Same character-by-character pattern as Level 3, retargeted at `sqli_four`:
+
+```sql
+SELECT SLEEP(2), 2
+FROM   users
+WHERE  username='admin' AND password LIKE '4%'
+```
+
+Letter-by-letter, with a 1.5–2 second delay per true answer. For a four-character password this is around a minute of work. For a 20-character mixed-case password, binary-searching each character is the difference between ~6 minutes and ~3 hours.
+
+**Why time-based is the slowest:**
+
+- Every TRUE answer costs you the sleep duration. 47 wrong guesses at 50ms each = 2.4s. 47 wrong guesses at 2000ms each = 94s. Sleep time dominates.
+- Network jitter makes short sleeps unreliable. 50ms sleeps over a real network with 30ms variance are a coin flip. Use 2s+ for any production network.
+- The `IF(condition, SLEEP(2), 0)` form lets you reuse one payload shape across all tests; the `SLEEP(2) FROM ... WHERE ...` form is more compact when the boolean comes from a WHERE.
+
+**What this level taught:**
+
+- The `time` field in the response is a debug leak. If you ever see it, treat it as a remote-controlled stopwatch.
+- For network-only timing (no leaked field), set a threshold of `2× baseline + 1s` and a sleep of `baseline + 1s`. Anything below the threshold is FALSE.
+- Time-based blind is the technique of last resort. If you can avoid it (error-based, union-based, boolean), you save hours.
+
+**Bonus — Level 5 master flag.** After completing all four levels the `/level5` page shows the "Training Complete" banner with the master flag for finishing the practical set. Not a separate level — purely a reward for clearing the chain.
+
+## Result
+
+Each level produced one of the four oracle outcomes:
+
+- **Level 1 (union / in-band)** — column count 3, visible column `subject`, database `sqli_one`, tables `article` and `staff_users`, columns `id`, `username`, `password`, three users (`admin`, `martin`, `jim`). Submitting martin's password returned `{"pass": true}` and unlocked Level 2.
+- **Level 2 (auth bypass)** — `' OR 1=1;--` in the username field logged in with any password. The flag is on Level 3's page.
+- **Level 3 (boolean blind)** — database name resolved to `sqli_three`, then `users` table, then columns, then the admin username and password via `LIKE 'prefix%'`. Roughly 40 requests for a four-digit password.
+- **Level 4 (time-based blind)** — two columns, `SLEEP(2)` threshold against a ~6ms baseline, admin password extracted character-by-character in `sqli_four`. Roughly a minute of work.
+- **Level 5 (bonus)** — master flag on the "Training Complete" banner after clearing all four.
+
+**Methodology summary.** The general playbook, ordered by speed and clarity:
+
+| Technique | Best for | What you need | Cost |
+|-----------|----------|---------------|------|
+| Union-based | App shows you the rows | Column count + visible column | One request per extraction |
+| Error-based | App shows you error text | Verbose error messages | One request per extraction |
+| Boolean blind | App shows you a yes/no | One boolean oracle | Linear in value length × charset |
+| Time-based blind | No visible oracle at all | Network or server timing | Worst case quadratic |
+
+Decision tree:
+
+1. Inject. Get the server to react differently than the baseline.
+2. If the reaction is data on the page → union.
+3. If the reaction is a yes/no signal → boolean blind.
+4. If the reaction is identical body → time-based blind.
+
+**Companion scripts.** Two scripts live in the `scripts/` folder:
+
+- `boolean_blind_enum.py` — single-character, single-target boolean blind extraction against any level that exposes the `true`/`false` JSON oracle. Use against Level 3.
+- `time_based_enum.py` — server-timing-leveraging time-based blind against the Level 4 `time` field. Faster than network-only timing by orders of magnitude.
+
+Both scripts keep the technique transparent: linear scan over a charset, request per probe, progress to stdout. Educational versions, not optimized for stealth. To run either, point the URL at your instance and edit the `WHERE` clause in the main function to retarget.
+
+**Defensive side.** If you are writing the app instead of attacking it:
+
+1. **Use parameterized queries / prepared statements for every variable that ends up in SQL.** No concatenation, full stop. The fix for Levels 1–4 is the same fix.
+2. **Use an ORM with bound parameters.** ActiveRecord, SQLAlchemy, Eloquent, Hibernate — they all default to bound parameters. The bug is when someone does `.raw()` for "just this one query."
+3. **Don't leak query execution time.** A debug `time` field in a JSON response is a free oracle. Constant-time responses, or no timing at all.
+4. **Don't return DB error text to the client.** Generic 500 page. Log the real error server-side.
+5. **Run a WAF in front.** It will not stop a determined attacker, but it stops the automated scanners from getting free wins.
+6. **Hash passwords, never store them in plaintext.** Levels 1 and 4 are a reminder that once SQLi lands, every password in the table falls out in one query.
+
+## Takeaway
+
+**The room's core lesson is that "blind" is a UI property, not a server property.** Every level here had a real oracle; the fake address bar and the `checkuser` widget just hid it from the page. The first move on any target is to find the actual request the fake UI is making — here, one `POST /run` endpoint with a `level` and a `sql` parameter explained four "different" apps.
+
+**Pick the cheapest oracle available, not the most famous one.** The ladder is union → error → boolean → time, and the cost model is concrete: one request per extraction, versus linear in value length × charset, versus the sleep duration dominating everything. A leaked `time` field turns the most expensive technique into the most precise one, because you can filter every other noise source out by making the delay two seconds wide.
+
+**`information_schema` plus `group_concat` is the whole union-based playbook.** Column count from the cardinality error, the rendered column as the landing slot, then enumerate: database → tables → columns → rows. `group_concat` is what makes multi-row extraction fit into a single cell.
+
+**The `$` gotcha is the kind of bug that wastes an hour.** martin's password contained `$`, and the form body parser ate the second `$` as a shell variable unless it was URL-encoded as `%24%24`. When a correct credential fails at the form, suspect the transport before the credential.
+
+**Outside the lab the same payloads have to survive more.** Real targets add:
+
+- **WAFs** — Cloudflare, AWS WAF, ModSecurity block the obvious payloads (`UNION SELECT`, `OR 1=1`, `SLEEP`). You start filtering through encoding (`%55nion%20select`), case variation (`uNiOn SeLeCt`), inline comments (`UN/**/ION SEL/**/ECT`), and HTTP parameter pollution.
+- **Prepared statements** — most modern frameworks use PDO / parameterized queries by default. The injection has to be a missed spot, a raw concatenation someone forgot to wrap. The bypass is the same payload; you just have to find the field that wasn't parameterized.
+- **Rate limiting** — 50 requests/second is enough for boolean blind; 1 request/second is not. Real-world boolean blind over a rate-limited target is a multi-day exercise.
+- **CAPTCHA and session tokens** — re-authenticate by hitting the login form first, capture the cookie, then send the injection chain under that session.
+- **Custom error pages** — production apps return generic 500 pages. You have to test for timing or boolean, because the page text never tells you the syntax error.
+
+**Always identify the engine.** MySQL syntax is the only thing this room tests. The same `UNION SELECT 1,2,3` works on MariaDB; on Postgres the column-count test still works but the catalog is `pg_catalog`; on MSSQL `information_schema` exists but `+` is the concat operator and `--` needs a trailing space. Carrying a payload across engines without checking is the most common way a working injection silently stops working.
+
+**What the lab does well:** it covers all four techniques in a single coherent app instead of forcing you to find four different vulnerable apps. The `/run` endpoint is the kind of thing a developer would actually write to test their own SQL and leave in production by accident, and the `time` field in Level 4 is realistic — "we'll just return the query time for debugging" is a feature I have actually seen in real internal tools.
+
+**What the lab skips:** WAF evasion (the room does not pretend to filter anything) and second-order SQLi, where the injection lands in one query and fires in another.
