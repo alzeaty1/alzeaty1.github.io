@@ -1,26 +1,31 @@
 /* ==========================================================================
    Field Notes — a single global stylesheet. No framework, no Tailwind.
 
-   Design constraints treated as invariants (verified in the build self-check):
-     - background is flat warm cream. No gradient of any kind.
-     - separation is done with 1px rules and whitespace. No box-shadow,
-       no filter blur, no backdrop, no floating panels.
+   Deep Sea palette. Structural identity preserved: 1px rules instead of
+   cards, square corners, serif headings + mono metadata, editorial restraint.
+
+   Design constraints treated as invariants (verified after build):
+     - no gradient of any kind, no box-shadow, no filter blur, no backdrop.
+     - separation is done with 1px rules and whitespace. Nothing floats.
      - border-radius is 0 everywhere. Nothing is rounded.
-     - content blocks are not cards. A block is a rule above and a rule below.
+     - no `transition: all`; only transform and opacity are animated.
    ========================================================================== */
 
 @import '@fontsource-variable/newsreader/index.css';
 @import '@fontsource-variable/jetbrains-mono/index.css';
 
 :root {
-  --paper: #f4efe4;
-  --paper-deep: #ece5d6;
-  --ink: #1c1a16;
-  --ink-soft: #4a453c;
-  --ink-faint: #7d7669;
-  --rule: #cdc4b1;
-  --rule-strong: #1c1a16;
-  --mark: #b4441f;
+  color-scheme: dark;
+
+  --ink: #0d1321;
+  --surface: #1d2d44;
+  --surface-2: #293d56;
+  --text: #f0ebd8;
+  --text-2: #93a4b6;
+  --meta: #6a839f;
+  --rule: #56728e;
+  --rule-strong: #748cab;
+  --accent: #e06b3f;
 
   --serif: 'Newsreader Variable', 'Iowan Old Style', 'Palatino Linotype',
     Palatino, Georgia, serif;
@@ -28,6 +33,11 @@
     'Cascadia Mono', Menlo, Consolas, monospace;
 
   --measure: 70ch;
+  /* The code/table measure: the full content width of the widest shell, and
+     never wider. Code gets more room than prose because a payload is read by
+     structure, not by line length — but it is still bounded, so the page
+     column never runs to the edge of a 1920px screen. */
+  --code-measure: 59rem;
   --gutter: 1.5rem;
 }
 
@@ -39,25 +49,61 @@
 }
 
 html {
-  background: var(--paper);
-  color: var(--ink);
+  background: var(--ink);
+  color: var(--text);
   font-size: 17px;
   -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
-  background: var(--paper);
-  color: var(--ink);
+  background: var(--ink);
+  color: var(--text);
   font-family: var(--serif);
   font-optical-sizing: auto;
   line-height: 1.62;
   font-variant-numeric: oldstyle-nums proportional-nums;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(224, 107, 63, 0.24);
 }
 
 ::selection {
-  background: var(--paper-deep);
-  color: var(--ink);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* --------------------------------------------------------- focus + a11y -- */
+
+/* One ring, everywhere, never removed. */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The skip link: present, keyboard reachable, invisible until focused. */
+.skip {
+  position: absolute;
+  left: var(--gutter);
+  top: -5rem;
+  z-index: 10;
+  display: inline-block;
+  min-height: 24px;
+  padding: 0.55rem 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+.skip:focus {
+  top: 0.6rem;
 }
 
 /* ---------------------------------------------------------------- shell -- */
@@ -66,6 +112,9 @@ body {
   max-width: 46rem;
   margin: 0 auto;
   padding: 0 var(--gutter);
+  /* The width reference for --code-measure: 100cqw is the shell's own content
+     box, i.e. the full page column that code is allowed to use. */
+  container-type: inline-size;
 }
 
 @media (min-width: 60rem) {
@@ -94,10 +143,14 @@ body {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   text-decoration: none;
-  color: var(--ink);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
 }
 
 .masthead__name:hover {
+  color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -105,7 +158,7 @@ body {
 .masthead__nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 1.4rem;
+  gap: 0 1.1rem;
   font-family: var(--mono);
   font-size: 0.78rem;
   letter-spacing: 0.1em;
@@ -113,15 +166,19 @@ body {
 }
 
 .masthead__nav a {
-  color: var(--ink-soft);
+  color: var(--text-2);
   text-decoration: none;
   border-bottom: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0.25rem 0;
 }
 
 .masthead__nav a:hover,
 .masthead__nav a[aria-current='page'] {
-  color: var(--ink);
-  border-bottom-color: var(--rule-strong);
+  color: var(--text);
+  border-bottom-color: var(--accent);
 }
 
 .colophon {
@@ -131,7 +188,7 @@ body {
   font-family: var(--mono);
   font-size: 0.72rem;
   letter-spacing: 0.06em;
-  color: var(--ink-faint);
+  color: var(--text-2);
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem 1.5rem;
@@ -151,6 +208,7 @@ h6 {
   letter-spacing: -0.01em;
   margin: 2.6rem 0 0.9rem;
   text-wrap: balance;
+  color: var(--text);
 }
 
 h1 {
@@ -175,7 +233,7 @@ h4 {
   font-size: 1rem;
   font-family: var(--mono);
   font-weight: 600;
-  color: var(--ink-soft);
+  color: var(--text-2);
 }
 
 p,
@@ -193,14 +251,14 @@ p {
 }
 
 a {
-  color: var(--ink);
+  color: var(--text);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
 
 a:hover {
-  color: var(--mark);
+  color: var(--accent);
 }
 
 strong {
@@ -217,7 +275,7 @@ blockquote {
   margin: 1.6rem 0;
   padding-left: 1.1rem;
   border-left: 1px solid var(--rule-strong);
-  color: var(--ink-soft);
+  color: var(--text-2);
   font-style: italic;
 }
 
@@ -252,22 +310,26 @@ pre {
 }
 
 code {
-  background: var(--paper-deep);
+  background: var(--surface);
+  border: 1px solid var(--rule);
   padding: 0.1em 0.32em;
 }
 
 pre {
-  background: var(--paper-deep);
+  background: var(--surface);
   border-top: 1px solid var(--rule);
   border-bottom: 1px solid var(--rule);
   padding: 0.9rem 1rem;
   margin: 1.5rem 0;
   overflow-x: auto;
   line-height: 1.5;
+  tab-size: 4;
+  white-space: pre;
 }
 
 pre code {
   background: none;
+  border: 0;
   padding: 0;
   font-size: 0.82rem;
 }
@@ -292,7 +354,146 @@ th {
   font-size: 0.74rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink-soft);
+  color: var(--text-2);
+}
+
+/* ------------------------------------------------------------- prose -- */
+/* The reading measure. The wide shell gave `.prose` no ceiling of its own, so
+   a single wide <pre> or <table> stretched the whole article column to the
+   full 62rem shell — ~100 characters of prose per line. The column is now
+   capped at the same --measure the text blocks use, so the measure is set by
+   the type, not by the widest payload on the page. */
+.prose {
+  max-width: var(--measure);
+}
+
+/* Code and tables get the wider --code-measure, capped at 100cqw — the content
+   width of the shell itself, which is the full page column. So a payload is
+   never squeezed below the page's own width, and can never push the page
+   sideways either. overflow-x stays on the box, so a line longer than even
+   this measure still pans instead of re-wrapping.
+
+   Two details matter here:
+
+   - max-width is restated because .prose__scroll sets `max-width: 100%`, which
+     would otherwise re-cap these boxes at the 70ch text column.
+   - The widening is scoped to *direct children* of .prose on purpose. A fence
+     nested in a list item or blockquote has less room than the shell does, so
+     100cqw would overshoot it and push the page sideways. Those keep the
+     default `max-width: 100%` from the rule above and fill their own box. */
+.prose pre,
+.prose .prose__scroll--table {
+  width: auto;
+  max-width: 100%;
+}
+
+.prose > pre,
+.prose > .prose__scroll--table {
+  width: min(var(--code-measure), 100cqw);
+  max-width: min(var(--code-measure), 100cqw);
+}
+
+@supports not (width: 1cqw) {
+  .prose > pre,
+  .prose > .prose__scroll--table {
+    width: auto;
+    max-width: 100%;
+  }
+}
+
+/* ------------------------------------------------- overflow containment -- */
+/* A 575px table or a 400px request header cannot be reflowed without
+   corrupting a payload, so the overflow is contained instead of broken.
+   The MDX pipeline wraps every <table> and every bare inline <code> in a
+   .prose__scroll box (src/lib/rehypeScrollWrap.mjs); the page never grows,
+   only the box does. */
+
+.prose__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* Inline code is not a block, so it needs the scroll box made inline-block
+   with a baseline the surrounding text can sit on. */
+.prose__scroll--code {
+  display: inline-block;
+  vertical-align: baseline;
+  /* no padding of its own: the inner <code> keeps its own chip padding */
+}
+
+.prose__scroll--table {
+  display: block;
+  /* the inner table's 1.5rem margin is pulled onto the box instead, so the
+     1px cell borders still read as a ruled table rather than a floating one */
+  margin: 1.5rem 0;
+}
+
+.prose__scroll--table > table {
+  margin: 0;
+  /* Let the table exceed the box when its content needs the room, without
+     collapsing cells to nothing on narrow screens. */
+  min-width: max-content;
+}
+
+/* The scroll affordance. A flat 1px rule under the table plus a mono caption
+   and a pointer cursor. No gradient, no shadow. The caption only exists once
+   JS has measured the box as genuinely overflowing, so well-behaved tables
+   stay quiet. */
+.prose__scroll--is-scrollable {
+  cursor: pointer;
+}
+
+.prose__scroll--table.prose__scroll--is-scrollable {
+  border-bottom: 1px solid var(--rule-strong);
+  padding-bottom: 0.45rem;
+}
+
+.prose__scroll__hint {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  line-height: 1.5;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin: 0.4rem 0 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  max-width: none;
+  /* The hint lives inside the scroll box, so it must never be the thing
+     that widens anything. It is a caption, not a payload: it wraps. */
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* The one-line, prose-level note. Shown only when at least one box on the
+   page overflows; the client pass adds this element. */
+.prose__scroll-note {
+  display: none;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  line-height: 1.5;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  margin: 1.6rem 0 0;
+  padding: 0.55rem 0 0;
+  border-top: 1px solid var(--rule);
+  max-width: none;
+}
+
+.prose__scroll-note[data-shown] {
+  display: block;
+}
+
+/* A scrollable box is only reachable by keyboard once it is focusable; the
+   client pass sets tabindex="0" and role="group" on overflowing boxes only. */
+.prose__scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 img,
@@ -303,7 +504,62 @@ video {
   border: 1px solid var(--rule);
 }
 
-/* ----------------------------------------------------------------- home -- */
+/* ----------------------------------------------------------------- hero -- */
+
+.hero {
+  padding: 2.6rem 0 0.4rem;
+}
+
+.hero__name {
+  font-size: clamp(2.6rem, 11vw, 5.2rem);
+  line-height: 1.02;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin: 0;
+  color: var(--text);
+}
+
+.hero__suffix {
+  display: block;
+  margin-top: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.hero__hook {
+  margin: 1.4rem 0 0;
+  font-size: 1.24rem;
+  line-height: 1.45;
+  max-width: 34ch;
+  color: var(--text);
+}
+
+.hero__labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.6rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: none;
+}
+
+.hero__labels li {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  border: 1px solid var(--rule);
+  padding: 0.25rem 0.5rem;
+}
+
+/* ---------------------------------------------------------------- home -- */
 
 .section {
   padding: 2.4rem 0;
@@ -320,7 +576,7 @@ video {
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--text-2);
   margin: 0 0 1rem;
 }
 
@@ -346,23 +602,24 @@ video {
 
 .engagement__table dt {
   flex: 0 0 6.5rem;
-  color: var(--ink-faint);
+  color: var(--text-2);
   letter-spacing: 0.12em;
 }
 
 .engagement__table dd {
   margin: 0;
-  color: var(--ink);
+  color: var(--text);
 }
 
 .engagement__flag {
-  color: var(--mark);
+  color: var(--accent);
 }
 
 .statement {
   font-size: 1.16rem;
   max-width: 34ch;
   margin: 0;
+  color: var(--text);
 }
 
 .statement + .statement {
@@ -392,7 +649,7 @@ video {
 .ledger__index {
   font-family: var(--mono);
   font-size: 0.75rem;
-  color: var(--ink-faint);
+  color: var(--text-2);
   flex: 0 0 2.5rem;
   letter-spacing: 0.08em;
 }
@@ -404,7 +661,7 @@ video {
 .ledger__body p {
   margin: 0.2rem 0 0;
   font-size: 0.94rem;
-  color: var(--ink-soft);
+  color: var(--text-2);
 }
 
 .ledger__body p:last-child {
@@ -413,74 +670,108 @@ video {
 
 .ledger__title {
   font-weight: 600;
-}
-
-.tag {
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  white-space: nowrap;
+  color: var(--text);
 }
 
 .backline {
   font-size: 1rem;
   margin: 0;
+  color: var(--text);
 }
 
 .backline + .backline {
   margin-top: 0.3rem;
 }
 
-/* -------------------------------------------------------------- listings -- */
+/* ------------------------------------------------- index entry treatment -- */
+/* A table of evidence, not a set of cards. Flat fill, 1px rule, no radius. */
 
 .entrylist {
   list-style: none;
   margin: 0;
   padding: 0;
+  max-width: none;
 }
 
 .entrylist > li {
-  border-top: 1px solid var(--rule);
-  padding: 1.1rem 0;
+  margin: 0 0 0.85rem;
+  padding: 0;
 }
 
 .entrylist > li:last-child {
-  border-bottom: 1px solid var(--rule);
+  margin-bottom: 0;
 }
 
-.entrylist__head {
+.entry {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  padding: 1.1rem 1.25rem;
+  text-decoration: none;
+  color: var(--text);
+}
+
+.entry:hover,
+.entry:focus-visible {
+  background: var(--surface-2);
+  border-color: var(--rule-strong);
+  color: var(--text);
+}
+
+.entry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.entry__row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.2rem 1.1rem;
+  gap: 0.3rem 1rem;
   align-items: baseline;
-  justify-content: space-between;
 }
 
-.entrylist__title {
-  font-size: 1.14rem;
-  font-weight: 600;
-  margin: 0;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-
-.entrylist__meta {
+.entry__index {
   font-family: var(--mono);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  color: var(--text-2);
+  flex: 0 0 2rem;
+}
+
+.entry__title {
+  flex: 1 1 18rem;
+  margin: 0;
+  padding-top: 0;
+  border-top: 0;
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 1.16rem;
+  line-height: 1.28;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.entry:hover .entry__title {
+  color: var(--accent);
+}
+
+.entry__meta {
+  font-family: var(--mono);
+  font-size: 0.68rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-faint);
-  margin: 0.3rem 0 0;
+  color: var(--text-2);
+  margin: 0.45rem 0 0;
+  font-variant-numeric: tabular-nums;
 }
 
-.entrylist__classes {
-  font-size: 0.94rem;
-  color: var(--ink-soft);
-  margin: 0.5rem 0 0;
-  max-width: var(--measure);
+.entry__classes {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--text-2);
+  margin: 0.4rem 0 0;
+  max-width: 56ch;
 }
 
 .linklist {
@@ -507,13 +798,41 @@ video {
   font-size: 0.72rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--text-2);
   flex: 0 0 7.5rem;
 }
 
 .linklist__val {
   flex: 1 1 16rem;
   word-break: break-word;
+}
+
+/* Standalone link lists (contact, scripts, appendix, entry meta) carry small
+   mono text at 17px; give those a real 24px target rather than a 17px line
+   box. Prose links are left alone — they run inside sentences. */
+.linklist__val a,
+.entry__meta a,
+.appendix-link a,
+.scripts a,
+.toc a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+/* A link that is the whole content of its own block — the "All 9 writeups"
+   jump and the tool URL — is a standalone target, not a word inside a
+   sentence, so it gets a full 24px box plus a little breathing room.
+   Display:inline-flex (not block) keeps it on its own line without
+   stretching the underline the full width of the measure. */
+.standalone-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+p:has(> .standalone-link:only-child) {
+  margin-bottom: 1.2rem;
 }
 
 /* -------------------------------------------------------------- writeup -- */
@@ -530,7 +849,7 @@ video {
   letter-spacing: 0.04em;
   margin: 1rem 0 0;
   max-width: none;
-  color: var(--ink-soft);
+  color: var(--text-2);
 }
 
 .metastrip > div {
@@ -541,7 +860,7 @@ video {
 
 .metastrip dt {
   flex: 0 0 6.5rem;
-  color: var(--ink-faint);
+  color: var(--text-2);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   font-size: 0.7rem;
@@ -549,6 +868,71 @@ video {
 
 .metastrip dd {
   margin: 0;
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------ toc block -- */
+
+.toc {
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  margin: 1.6rem 0 0;
+  padding: 0.9rem 0 1rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+}
+
+.toc__label {
+  margin: 0 0 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+.toc__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 1.1rem;
+}
+
+.toc__list li {
+  margin: 0;
+}
+
+.toc a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.toc a:hover {
+  color: var(--accent);
+  border-bottom-color: var(--rule);
+}
+
+/* Collapsed by default only on narrow viewports, via <details> below. */
+.toc > summary {
+  list-style: none;
+  cursor: pointer;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.toc > summary::-webkit-details-marker {
+  display: none;
 }
 
 .appendix-link {
@@ -565,6 +949,14 @@ video {
   font-family: var(--mono);
   font-size: 0.8rem;
   letter-spacing: 0.03em;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  /* A long script path is a path, not prose: it scrolls rather than
+     re-wraps, so the filename stays exactly as written. */
+  max-width: 100%;
+  overflow-x: auto;
+  vertical-align: baseline;
 }
 
 .scripts {
@@ -597,6 +989,12 @@ video {
   text-transform: uppercase;
 }
 
+.pager a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -607,6 +1005,33 @@ video {
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* --------------------------------------------------------------- motion -- */
+/* Restrained, once only, interruptible, and absent under reduced motion.
+   Only transform and opacity are animated. No loops, nothing autoplays. */
+
+/* Gated on .has-js so that with scripting off every entry is simply
+   visible — no invisible content, ever. */
+@media (prefers-reduced-motion: no-preference) {
+  .has-js .reveal {
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 400ms ease-out, transform 400ms ease-out;
+  }
+
+  .has-js .reveal.is-in {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .has-js .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
 }
 
 @media (max-width: 26rem) {

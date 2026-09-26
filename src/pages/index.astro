@@ -7,6 +7,24 @@ const { standalone, appendices } = await loadWriteups();
 const preview = standalone.slice(0, 4);
 const appendixCount = appendices.length;
 
+// Hook candidates, all grounded in what the writeups actually show:
+//   A. "I break lab machines on my own time and write down the exact request
+//       that worked."
+//   B. "Ten lab writeups, from an exposed .git directory to a loopback node
+//       inspector pivot."
+//   C. "Every writeup here is one machine, worked start to finish."
+// A is the most concrete: it states the method, not a result, and the
+// writeups do record the raw requests and responses.
+const hook = 'I break lab machines on my own time and write down the exact request that worked.';
+
+const labels = [
+  'FIELD NOTES',
+  'v1.0',
+  `THM / ${standalone.length} ROOMS`,
+  'AoC 2025 / 24',
+  'EST. 2026',
+];
+
 const proof = [
   {
     title: 'NTI / NTRA Cybersecurity Academy',
@@ -31,6 +49,15 @@ const contact = [
 ---
 
 <Base title="Ahmed Abdalrhman — field notes" description="Field notes from a junior penetration tester: web application and network lab work, written up step by step.">
+  <section class="hero">
+    <h1 class="hero__name">Ahmed Abdalrhman</h1>
+    <p class="hero__suffix">alzeaty</p>
+    <p class="hero__hook">{hook}</p>
+    <ul class="hero__labels" aria-hidden="true">
+      {labels.map((label) => <li>{label}</li>)}
+    </ul>
+  </section>
+
   <section class="engagement">
     <dl class="engagement__table">
       <div>
@@ -92,20 +119,24 @@ const contact = [
     <p class="section__label">Writeups</p>
     <ul class="entrylist">
       {
-        preview.map((entry) => (
-          <li>
-            <div class="entrylist__head">
-              <h2 class="entrylist__title">
-                <a href={`/writeups/${entry.id}/`}>{entry.data.title}</a>
-              </h2>
-              <span class="tag">{entry.data.difficulty}</span>
-            </div>
+        preview.map((entry, i) => (
+          <li class="reveal">
+            <a class="entry" href={`/writeups/${entry.id}/`}>
+              <div class="entry__row">
+                <span class="entry__index">{String(i + 1).padStart(2, '0')}</span>
+                <h2 class="entry__title">{entry.data.title}</h2>
+              </div>
+              <p class="entry__meta">
+                {entry.data.room} &middot; {entry.data.difficulty}
+              </p>
+              {entry.data.vulnClass && <p class="entry__classes">{entry.data.vulnClass}</p>}
+            </a>
           </li>
         ))
       }
     </ul>
     <p>
-      <a href="/writeups/">All {standalone.length} writeups{appendixCount ? `, plus ${appendixCount} appendix` : ''}</a>
+      <a class="standalone-link" href="/writeups/">All {standalone.length} writeups{appendixCount ? `, plus ${appendixCount} appendix` : ''}</a>
     </p>
   </section>
 
@@ -113,7 +144,7 @@ const contact = [
     <p class="section__label">Tool</p>
     <p>
       <strong>ctf-crypto-analysis-tool</strong> &mdash;
-      <a href="https://github.com/alzeaty1/ctf-crypto-analysis-tool">github.com/alzeaty1/ctf-crypto-analysis-tool</a>.
+      <a class="standalone-link" href="https://github.com/alzeaty1/ctf-crypto-analysis-tool">github.com/alzeaty1/ctf-crypto-analysis-tool</a>.
       A modular crypto analysis CLI with a plugin registry, a pytest suite, MIT
       licensed. It covers XOR analysis (known-key, single-byte brute force, and
       repeating-key recovery via column scoring with beam search), entropy and

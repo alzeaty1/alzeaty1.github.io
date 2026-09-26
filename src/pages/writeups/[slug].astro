@@ -9,7 +9,11 @@ export async function getStaticPaths() {
 }
 
 const { entry } = Astro.props;
-const { Content } = await render(entry);
+const { Content, headings } = await render(entry);
+
+// Derived from the rendered headings — never hardcoded. Depth 2 only, so
+// the TOC matches the writeup's own top-level structure.
+const sections = headings.filter((h) => h.depth === 2);
 
 const { all, appendices } = await loadWriteups();
 const position = all.findIndex((e) => e.id === entry.id);
@@ -28,7 +32,7 @@ const scripts = scriptsFor(entry.id);
     <header class="writeup__head">
       {
         isAppendix && parent && (
-          <p class="entrylist__meta">
+          <p class="entry__meta">
             Appendix to <a href={`/writeups/${parent.id}/`}>{parent.data.title}</a>
           </p>
         )
@@ -71,9 +75,67 @@ const scripts = scriptsFor(entry.id);
       </dl>
     </header>
 
+    {
+      sections.length > 1 && (
+        <details class="toc" open>
+          <summary class="toc__label">On this page</summary>
+          <ul class="toc__list">
+            {sections.map((h) => (
+              <li><a href={`#${h.slug}`}>{h.text}</a></li>
+            ))}
+          </ul>
+        </details>
+      )
+    }
+
     <div class="prose">
       <Content />
     </div>
+
+    <script>
+      // The CSS already contains the overflow; this pass only reports it.
+      // Boxes that actually scroll get the affordance and become focusable,
+      // so a keyboard reader can pan them. Boxes that fit are left alone, so
+      // short code spans never turn into tab stops.
+      const boxes = Array.from(
+        document.querySelectorAll('.prose__scroll'),
+      );
+      let anyScrollable = false;
+
+      for (const box of boxes) {
+        // 1px of slack: sub-pixel layout must not flip the affordance on.
+        if (box.scrollWidth - box.clientWidth <= 1) continue;
+
+        anyScrollable = true;
+        box.classList.add('prose__scroll--is-scrollable');
+        box.tabIndex = 0;
+        box.setAttribute('role', 'group');
+        box.setAttribute(
+          'aria-label',
+          box.classList.contains('prose__scroll--table')
+            ? 'Table, scrolls sideways'
+            : 'Code, scrolls sideways',
+        );
+
+        if (box.classList.contains('prose__scroll--table')) {
+          const hint = document.createElement('p');
+          hint.className = 'prose__scroll__hint';
+          hint.textContent = '→ scroll sideways to see the rest of this table';
+          hint.setAttribute('aria-hidden', 'true');
+          box.append(hint);
+        }
+      }
+
+      if (anyScrollable) {
+        const note = document.createElement('p');
+        note.className = 'prose__scroll-note';
+        note.setAttribute('data-shown', '');
+        note.innerHTML =
+          'Wide tables and long code spans scroll sideways. ' +
+          'They are kept on one line on purpose &mdash; nothing here is re-wrapped.';
+        document.querySelector('.prose').append(note);
+      }
+    </script>
 
     {
       children.length > 0 && (

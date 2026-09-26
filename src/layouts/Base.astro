@@ -27,11 +27,27 @@ const nav = [
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
+    <meta name="theme-color" content="#0d1321" />
+    <meta name="color-scheme" content="dark" />
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={new URL(path, Astro.site)} />
+    <script is:inline>
+      // Marks that scripting is available before first paint, so the reveal
+      // styles only ever apply when something can actually un-hide content.
+      document.documentElement.classList.add('has-js');
+
+      // The TOC is a <details>. Open it on wide viewports; start it closed
+      // on narrow ones, where the section list is noise before you ask for it.
+      document.addEventListener('DOMContentLoaded', () => {
+        if (window.matchMedia('(max-width: 34rem)').matches) {
+          document.querySelectorAll('details.toc[open]').forEach((d) => d.removeAttribute('open'));
+        }
+      });
+    </script>
   </head>
   <body>
+    <a class="skip" href="#main">Skip to content</a>
     <div class:list={['shell', wide && 'shell--wide']}>
       <header class="masthead">
         <div class="masthead__row">
@@ -59,7 +75,7 @@ const nav = [
         </div>
       </header>
 
-      <main>
+      <main id="main">
         <slot />
       </main>
 
@@ -68,5 +84,30 @@ const nav = [
         <span>Set in Newsreader and JetBrains Mono.</span>
       </footer>
     </div>
+
+    <script>
+      // One IntersectionObserver, once per element, transform + opacity only.
+      // Under prefers-reduced-motion the CSS keeps everything visible, so
+      // there is nothing to do here.
+      const targets = document.querySelectorAll('.reveal');
+      const motion = window.matchMedia('(prefers-reduced-motion: no-preference)');
+
+      if (targets.length && motion.matches && 'IntersectionObserver' in window) {
+        const io = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('is-in');
+                io.unobserve(entry.target);
+              }
+            }
+          },
+          { rootMargin: '0px 0px -8% 0px', threshold: 0.05 }
+        );
+        targets.forEach((el) => io.observe(el));
+      } else {
+        targets.forEach((el) => el.classList.add('is-in'));
+      }
+    </script>
   </body>
 </html>

@@ -20,18 +20,18 @@ const { standalone, appendices } = await loadWriteups();
 
   <ul class="entrylist">
     {
-      standalone.map((entry) => (
-        <li>
-          <div class="entrylist__head">
-            <h2 class="entrylist__title">
-              <a href={`/writeups/${entry.id}/`}>{entry.data.title}</a>
-            </h2>
-            <span class="tag">{entry.data.difficulty}</span>
-          </div>
-          <p class="entrylist__meta">
-            {entry.data.platform ?? 'lab'} &middot; {entry.data.room}
-          </p>
-          {entry.data.vulnClass && <p class="entrylist__classes">{entry.data.vulnClass}</p>}
+      standalone.map((entry, i) => (
+        <li class="reveal">
+          <a class="entry" href={`/writeups/${entry.id}/`}>
+            <div class="entry__row">
+              <span class="entry__index">{String(i + 1).padStart(2, '0')}</span>
+              <h2 class="entry__title">{entry.data.title}</h2>
+            </div>
+            <p class="entry__meta">
+              {entry.data.platform ?? 'lab'} &middot; {entry.data.room} &middot; {entry.data.difficulty}
+            </p>
+            {entry.data.vulnClass && <p class="entry__classes">{entry.data.vulnClass}</p>}
+          </a>
         </li>
       ))
     }
@@ -41,14 +41,14 @@ const { standalone, appendices } = await loadWriteups();
   <ul class="entrylist">
     {
       appendices.map((entry) => (
-        <li>
-          <div class="entrylist__head">
-            <h3 class="entrylist__title">
-              <a href={`/writeups/${entry.id}/`}>{entry.data.title}</a>
-            </h3>
-            <span class="tag">appendix</span>
-          </div>
-          <p class="entrylist__meta">Belongs to the writeup it is linked from.</p>
+        <li class="reveal">
+          <a class="entry" href={`/writeups/${entry.id}/`}>
+            <div class="entry__row">
+              <span class="entry__index">A1</span>
+              <h3 class="entry__title">{entry.data.title}</h3>
+            </div>
+            <p class="entry__meta">Appendix &middot; belongs to the writeup it is linked from</p>
+          </a>
         </li>
       ))
     }
