@@ -1,180 +1,169 @@
 ---
 import Base from '../layouts/Base.astro';
 import { loadWriteups } from '../lib/entries';
+import InvestigationGraphic from '../components/InvestigationGraphic.astro';
 
 const { standalone, appendices } = await loadWriteups();
-
-const preview = standalone.slice(0, 4);
-const appendixCount = appendices.length;
-
-// Hook candidates, all grounded in what the writeups actually show:
-//   A. "I break lab machines on my own time and write down the exact request
-//       that worked."
-//   B. "Ten lab writeups, from an exposed .git directory to a loopback node
-//       inspector pivot."
-//   C. "Every writeup here is one machine, worked start to finish."
-// A is the most concrete: it states the method, not a result, and the
-// writeups do record the raw requests and responses.
-const hook = 'I break lab machines on my own time and write down the exact request that worked.';
-
-const labels = [
-  'FIELD NOTES',
-  'v1.0',
-  `THM / ${standalone.length} ROOMS`,
-  'AoC 2025 / 24',
-  'EST. 2026',
-];
-
-const proof = [
+const featured = standalone.find((entry) => entry.id === 'complimentary-aws') ?? standalone[0];
+const recent = standalone.filter((entry) => entry.id !== featured?.id).slice(0, 3);
+const projectPreview = [
   {
-    title: 'NTI / NTRA Cybersecurity Academy',
-    body: 'National Telecom Institute, Ministry of Communications.',
+    number: '01',
+    name: 'StudyOS',
+    href: '/projects/#studyos',
+    field: 'Product engineering · Django',
+    summary: 'A local-first study workspace that turns a subject library into a browsable, searchable place to learn.',
   },
   {
-    title: 'TryHackMe Advent of Cyber 2025',
-    body: '24 challenges completed. Certificate ID THM-I1Q2HMQIIO.',
+    number: '02',
+    name: 'Installment Management System',
+    href: '/projects/#installment-system',
+    field: 'Business software · Django',
+    summary: 'An Arabic RTL application connecting customer records, installment contracts, scheduled payments, and reporting.',
   },
-  {
-    title: 'PortSwigger Web Security Academy',
-    body: 'All Access Control and Authentication labs.',
-  },
-];
-
-const contact = [
-  { key: 'Email', value: 'ahmedabdalrhman838@gmail.com', href: 'mailto:ahmedabdalrhman838@gmail.com' },
-  { key: 'GitHub', value: 'github.com/alzeaty1', href: 'https://github.com/alzeaty1' },
-  { key: 'TryHackMe', value: 'tryhackme.com/p/ALZeaty', href: 'https://tryhackme.com/p/ALZeaty' },
-  { key: 'LinkedIn', value: 'linkedin.com/in/ahmed-abdalrhman838', href: 'https://linkedin.com/in/ahmed-abdalrhman838' },
 ];
 ---
 
-<Base title="Ahmed Abdalrhman — field notes" description="Field notes from a junior penetration tester: web application and network lab work, written up step by step.">
-  <section class="hero">
-    <h1 class="hero__name">Ahmed Abdalrhman</h1>
-    <p class="hero__suffix">alzeaty</p>
-    <p class="hero__hook">{hook}</p>
-    <ul class="hero__labels" aria-hidden="true">
-      {labels.map((label) => <li>{label}</li>)}
-    </ul>
+<Base
+  title="Ahmed Abdalrhman — Cybersecurity Portfolio | ALZeaty"
+  description="Ahmed Abdalrhman, known as ALZeaty: a cybersecurity portfolio focused on web application security, penetration testing, investigation notes, and software projects."
+  wide
+>
+  <section class="cover" aria-labelledby="cover-title">
+    <div class="cover__copy">
+      <p class="eyebrow"><span class="eyebrow__tick" aria-hidden="true"></span> Cybersecurity portfolio <span class="eyebrow__divider">/</span> software engineering</p>
+      <h1 id="cover-title">Ahmed<br /><em>Abdalrhman</em></h1>
+      <p class="cover__name">Portfolio <span class="cover__handle">— ALZeaty</span></p>
+      <p class="cover__focus">Web application security <span>·</span> Penetration testing <span>·</span> Vulnerability research</p>
+      <p class="cover__statement">I don't just document vulnerabilities. I document the investigation behind them: what I noticed, what I tested, and what the evidence actually showed.</p>
+      <div class="cover__actions">
+        <a class="button button--primary" href="/writeups/">Explore investigations <span aria-hidden="true">↗</span></a>
+        <a class="button button--quiet" href="/projects/">See what I build <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+    <aside class="cover__margin" aria-label="Investigation method and verified achievement">
+      <InvestigationGraphic />
+      <a class="rank-note" href="https://tryhackme.com/p/ALZeaty" rel="me">
+        <span class="rank-note__label">TRYHACKME PROFILE</span>
+        <span class="rank-note__value">Top <strong>4%</strong></span>
+        <span class="rank-note__link">View profile <span aria-hidden="true">↗</span></span>
+      </a>
+    </aside>
+    <p class="cover__folio" aria-hidden="true">SELECTED SECURITY WORK <span>—</span> ALZEATY</p>
   </section>
 
-  <section class="engagement">
-    <dl class="engagement__table">
-      <div>
-        <dt>TARGET</dt>
-        <dd>alzeaty1</dd>
+  <section class="notebook-section notebook-section--statement" aria-labelledby="method-title">
+    <div class="section-marker"><span>01</span><span>METHOD</span></div>
+    <div class="statement-grid">
+      <h2 id="method-title">A finding is a conclusion.<br /><em>The path to it is the work.</em></h2>
+      <div class="statement-copy">
+        <p>My focus is web application security: understanding how a system behaves, testing the assumptions around it, and following the evidence instead of jumping to a payload.</p>
+        <p>These notes come from self-directed TryHackMe and PortSwigger labs. They are learning records, not client engagements or claims of real-world discoveries.</p>
       </div>
-      <div>
-        <dt>SCOPE</dt>
-        <dd>web applications &middot; networks &middot; recon</dd>
-      </div>
-      <div>
-        <dt>POSTURE</dt>
-        <dd>junior, actively hunting</dd>
-      </div>
-      <div>
-        <dt>STATUS</dt>
-        <dd>[ <span class="engagement__flag">&#9679; open to opportunities</span> ]</dd>
-      </div>
-    </dl>
+    </div>
   </section>
 
-  <section class="section">
-    <p class="section__label">Position</p>
-    <p class="statement">
-      I am a junior penetration tester. I work through self-directed lab machines
-      &mdash; TryHackMe rooms, PortSwigger Academy &mdash; and write up what I find
-      step by step so I can reread it later.
-    </p>
-    <p class="statement">
-      My focus is web application and network work: authentication and access
-      control flaws, injection, exposed cloud credentials, and traffic analysis.
-    </p>
-  </section>
+  {featured && (
+    <section class="notebook-section" aria-labelledby="featured-title">
+      <div class="section-marker"><span>02</span><span>OPEN CASE</span></div>
+      <article class="featured-case">
+        <div class="featured-case__side">
+          <span class="case-stamp">FEATURED INVESTIGATION</span>
+          <p class="featured-case__question">The question</p>
+          <p class="featured-case__prompt">What does “no login required” actually allow an application to do?</p>
+        </div>
+        <div class="featured-case__main">
+          <p class="record-meta">{featured.data.platform ?? 'Lab'} <span>·</span> {featured.data.room} <span>·</span> {featured.data.difficulty}</p>
+          <h2 id="featured-title">{featured.data.title}</h2>
+          <p class="featured-case__summary">I followed an apparently anonymous guest session through its identity pool, temporary credentials, and database requests to understand which permissions the application had exposed.</p>
+          <p class="featured-case__method"><span>IN THIS RECORD</span> Browser observation <i>→</i> request inspection <i>→</i> permission testing <i>→</i> evidence</p>
+          <a class="text-link" href={`/writeups/${featured.id}/`}>Read the investigation <span aria-hidden="true">↗</span></a>
+        </div>
+      </article>
+    </section>
+  )}
 
-  <section class="section">
-    <p class="section__label">Proof</p>
-    <ul class="ledger">
-      {
-        proof.map((item, i) => (
-          <li>
-            <span class="ledger__index">{String(i + 1).padStart(2, '0')}</span>
-            <span class="ledger__body">
-              <span class="ledger__title">{item.title}</span>
-              <p>{item.body}</p>
+  <section class="notebook-section" aria-labelledby="library-title">
+    <div class="section-marker"><span>03</span><span>INDEX</span></div>
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">The investigation library</p>
+        <h2 id="library-title">Notes that keep<br /><em>the steps in view.</em></h2>
+      </div>
+      <p class="section-heading__aside">
+        {standalone.length} lab writeups <span>·</span> {appendices.length} appendix {appendices.length === 1 ? 'entry' : 'entries'}<br />Each one follows the evidence recorded in the original investigation.
+      </p>
+    </div>
+    <ol class="index-list">
+      {recent.map((entry, i) => (
+        <li>
+          <a class="index-row" href={`/writeups/${entry.id}/`}>
+            <span class="index-row__number">{String(i + 1).padStart(2, '0')}</span>
+            <span class="index-row__body">
+              <span class="index-row__title">{entry.data.title}</span>
+              <span class="index-row__meta">{entry.data.platform ?? 'Lab'} <span>·</span> {entry.data.room}</span>
             </span>
-          </li>
-        ))
-      }
-    </ul>
+            <span class="index-row__arrow" aria-hidden="true">↗</span>
+          </a>
+        </li>
+      ))}
+    </ol>
+    <p class="section-end"><a class="text-link" href="/writeups/">Browse all investigations <span aria-hidden="true">↗</span></a></p>
   </section>
 
-  <section class="section">
-    <p class="section__label">Background</p>
-    <p class="backline">Al Nour Tech, 2019&ndash;2021 &mdash; IT and network engineering.</p>
-    <p class="backline">Freelance web development, 2021&ndash;2023. The security work came out of that.</p>
+  <section class="notebook-section" aria-labelledby="projects-title">
+    <div class="section-marker"><span>04</span><span>BUILT WORK</span></div>
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Beyond the lab</p>
+        <h2 id="projects-title">Systems built for<br /><em>real workflows.</em></h2>
+      </div>
+      <p class="section-heading__aside">Security is one way I study software. Building products is another: each project starts with a workflow that needs to make sense.</p>
+    </div>
+    <div class="project-ledger">
+      {projectPreview.map((project) => (
+        <a class="project-ledger__row" href={project.href}>
+          <span class="project-ledger__number">{project.number}</span>
+          <span class="project-ledger__body">
+            <span class="project-ledger__meta">{project.field}</span>
+            <span class="project-ledger__title">{project.name}</span>
+            <span class="project-ledger__summary">{project.summary}</span>
+          </span>
+          <span class="project-ledger__arrow" aria-hidden="true">↗</span>
+        </a>
+      ))}
+    </div>
+    <p class="section-end"><a class="text-link" href="/projects/">Read the project case studies <span aria-hidden="true">↗</span></a></p>
   </section>
 
-  <section class="section">
-    <p class="section__label">Writeups</p>
-    <ul class="entrylist">
-      {
-        preview.map((entry, i) => (
-          <li class="reveal">
-            <a class="entry" href={`/writeups/${entry.id}/`}>
-              <div class="entry__row">
-                <span class="entry__index">{String(i + 1).padStart(2, '0')}</span>
-                <h2 class="entry__title">{entry.data.title}</h2>
-              </div>
-              <p class="entry__meta">
-                {entry.data.room} &middot; {entry.data.difficulty}
-              </p>
-              {entry.data.vulnClass && <p class="entry__classes">{entry.data.vulnClass}</p>}
-            </a>
-          </li>
-        ))
-      }
-    </ul>
-    <p>
-      <a class="standalone-link" href="/writeups/">All {standalone.length} writeups{appendixCount ? `, plus ${appendixCount} appendix` : ''}</a>
-    </p>
+  <section class="notebook-section notebook-section--practice" aria-labelledby="practice-title">
+    <div class="section-marker"><span>05</span><span>ENGINEERING PRACTICE</span></div>
+    <div class="practice-grid">
+      <div>
+        <p class="eyebrow">AI-assisted development</p>
+        <h2 id="practice-title">Tools can help.<br /><em>Judgment still matters.</em></h2>
+      </div>
+      <div class="practice-copy">
+        <p>I use coding agents as collaborators in a reviewed engineering workflow: define a focused task, give it the right project context, inspect the changes, and verify the integrated result.</p>
+        <ul class="practice-list" aria-label="AI-assisted engineering practices">
+          <li>AI-assisted software development</li>
+          <li>Agent task delegation and orchestration</li>
+          <li>Structured prompting and context handoffs</li>
+          <li>Human-in-the-loop review and integration</li>
+        </ul>
+        <p class="practice-tools">TOOLS IN MY WORKFLOW <span>Codex</span><span>OpenCode</span><span>Hermes Agent</span></p>
+      </div>
+    </div>
   </section>
 
-  <section class="section">
-    <p class="section__label">Tool</p>
-    <p>
-      <strong>ctf-crypto-analysis-tool</strong> &mdash;
-      <a class="standalone-link" href="https://github.com/alzeaty1/ctf-crypto-analysis-tool">github.com/alzeaty1/ctf-crypto-analysis-tool</a>.
-      A modular crypto analysis CLI with a plugin registry, a pytest suite, MIT
-      licensed. It covers XOR analysis (known-key, single-byte brute force, and
-      repeating-key recovery via column scoring with beam search), entropy and
-      English-language scoring, and ECB repeated-block detection. One cipher
-      family is implemented so far; the rest of the registry is scaffolding.
-    </p>
-  </section>
-
-  <section class="section">
-    <p class="section__label">Notes</p>
-    <p>
-      A separate set of reading notes on other people&rsquo;s published bug bounty
-      writeups &mdash; what they did, what I would try differently. These are
-      notes on other authors&rsquo; findings, not my own.
-    </p>
-  </section>
-
-  <section class="section">
-    <p class="section__label">Contact</p>
-    <ul class="linklist">
-      {
-        contact.map((item) => (
-          <li>
-            <span class="linklist__key">{item.key}</span>
-            <span class="linklist__val">
-              <a href={item.href}>{item.value}</a>
-            </span>
-          </li>
-        ))
-      }
-    </ul>
+  <section class="contact-close" aria-labelledby="contact-title">
+    <p class="eyebrow">A note is a starting point</p>
+    <h2 id="contact-title">Have a question<br /><em>worth investigating?</em></h2>
+    <a class="button button--primary" href="mailto:ahmedabdalrhman838@gmail.com">Get in touch <span aria-hidden="true">↗</span></a>
+    <div class="contact-close__links">
+      <a href="https://github.com/alzeaty1">GitHub <span aria-hidden="true">↗</span></a>
+      <a href="https://linkedin.com/in/ahmed-abdalrhman838">LinkedIn <span aria-hidden="true">↗</span></a>
+      <a href="https://tryhackme.com/p/ALZeaty">TryHackMe <span aria-hidden="true">↗</span></a>
+    </div>
   </section>
 </Base>

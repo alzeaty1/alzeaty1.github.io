@@ -1,64 +1,51 @@
 ---
 import Base from '../layouts/Base.astro';
-import { loadWriteups } from '../lib/entries';
-
-const { standalone, appendices } = await loadWriteups();
 ---
 
 <Base
-  title="About — Ahmed Abdalrhman"
-  description="Junior penetration tester. Web application and network lab work, written up step by step."
+  title="About — Ahmed Abdalrhman | ALZeaty Portfolio"
+  description="Ahmed Abdalrhman, known online as ALZeaty: junior penetration tester focused on web application and network security."
+  wide
 >
-  <h1>About</h1>
+  <header class="page-cover page-cover--about">
+    <p class="eyebrow"><span class="eyebrow__tick" aria-hidden="true"></span> About the investigator</p>
+    <h1>Ahmed Abdalrhman<br /><em>ALZeaty</em></h1>
+    <p class="page-cover__lede">Junior penetration tester, learning in public through careful lab work and investigation notes.</p>
+  </header>
 
-  <p>
-    I am a junior penetration tester working on web applications and networks.
-    I study by breaking lab machines on my own time &mdash; mostly TryHackMe rooms
-    and the PortSwigger Web Security Academy &mdash; and I write up each one
-    while it is still fresh.
-  </p>
+  <section class="about-body">
+    <div class="section-marker"><span>01</span><span>BACKGROUND</span></div>
+    <div class="about-prose">
+      <p>I work on web applications and networks. I study by working through lab machines, mainly TryHackMe rooms and the PortSwigger Web Security Academy, and write up what I observed while the sequence is still clear.</p>
+      <p>The writeups here are lab notes, not client reports. They follow the order I actually worked in: what I observed, what I tested, what came back, and what I would take from it next time. Where a step was not recorded while I was solving, the note says so rather than filling the gap in.</p>
+      <p>Before security, I worked in IT and network engineering at Al Nour Tech from 2019 to 2021, then in freelance web development until 2023. The security work grew from wanting to understand how the systems I helped build could break.</p>
+    </div>
+  </section>
 
-  <p>
-    The writeups here are lab notes, not client reports. They follow the order I
-    actually worked in: what I observed, what I did, what came back, and what I
-    would take from it next time. Where a step was not recorded while I was
-    solving, the note says so instead of filling the gap in.
-  </p>
+  <section class="about-body about-body--focus">
+    <div class="section-marker"><span>02</span><span>FOCUS</span></div>
+    <div>
+      <h2>Questions I keep<br /><em>coming back to.</em></h2>
+      <ul class="focus-list">
+        <li>What does the application trust about a request?</li>
+        <li>Where does identity or access control change the result?</li>
+        <li>What does the response reveal when the obvious path fails?</li>
+        <li>Can I explain the conclusion from the evidence I recorded?</li>
+      </ul>
+      <p class="about-boundary">Lab environments are presented as training work. The investigation library does not imply client work or real-world vulnerability discoveries.</p>
+    </div>
+  </section>
 
-  <p>
-    Before security I did IT and network engineering at Al Nour Tech from 2019
-    to 2021, then freelance web development until 2023. The security work grew
-    out of that: I had been the person wiring up the networks and shipping the
-    web apps, and then I wanted to know where they broke.
-  </p>
-
-  <h2>What is here</h2>
-  <ul>
-    <li>{standalone.length} writeups, from exposed version control to cloud credential abuse.</li>
-    <li>
-      {appendices.length} appendix entry {appendices.length === 1 ? '' : 'entries'} kept with the
-      writeup it belongs to.
-    </li>
-    <li>Four sanitized Python helper scripts, linked from the writeups that used them.</li>
-  </ul>
-
-  <h2>Elsewhere</h2>
-  <ul class="linklist">
-    <li>
-      <span class="linklist__key">Email</span>
-      <span class="linklist__val"><a href="mailto:ahmedabdalrhman838@gmail.com">ahmedabdalrhman838@gmail.com</a></span>
-    </li>
-    <li>
-      <span class="linklist__key">GitHub</span>
-      <span class="linklist__val"><a href="https://github.com/alzeaty1">github.com/alzeaty1</a></span>
-    </li>
-    <li>
-      <span class="linklist__key">TryHackMe</span>
-      <span class="linklist__val"><a href="https://tryhackme.com/p/ALZeaty">tryhackme.com/p/ALZeaty</a></span>
-    </li>
-    <li>
-      <span class="linklist__key">LinkedIn</span>
-      <span class="linklist__val"><a href="https://linkedin.com/in/ahmed-abdalrhman838">linkedin.com/in/ahmed-abdalrhman838</a></span>
-    </li>
-  </ul>
+  <section class="about-body about-body--contact" aria-labelledby="contact-links-title">
+    <div class="section-marker"><span>03</span><span>CONTACT</span></div>
+    <div>
+      <h2 id="contact-links-title">Elsewhere on<br /><em>the record.</em></h2>
+      <ul class="contact-list">
+        <li><span>Email</span><a href="mailto:ahmedabdalrhman838@gmail.com">ahmedabdalrhman838@gmail.com</a></li>
+        <li><span>GitHub</span><a href="https://github.com/alzeaty1">github.com/alzeaty1</a></li>
+        <li><span>LinkedIn</span><a href="https://linkedin.com/in/ahmed-abdalrhman838">linkedin.com/in/ahmed-abdalrhman838</a></li>
+        <li><span>TryHackMe</span><a href="https://tryhackme.com/p/ALZeaty">tryhackme.com/p/ALZeaty</a></li>
+      </ul>
+    </div>
+  </section>
 </Base>

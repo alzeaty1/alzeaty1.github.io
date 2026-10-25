@@ -1,0 +1,168 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+
+<Base
+  title="Projects — Ahmed Abdalrhman | ALZeaty Portfolio"
+  description="Product and engineering case studies: StudyOS, a local-first nursing study workspace, and an Arabic installment management system."
+  wide
+>
+  <header class="page-cover">
+    <p class="eyebrow"><span class="eyebrow__tick" aria-hidden="true"></span> Product and engineering records</p>
+    <h1>Built to make<br /><em>the next step clearer.</em></h1>
+    <p class="page-cover__lede">Two applications I built and documented from their implemented source. Each begins with a real workflow — finding what to study, or keeping installment plans and payments in order — then follows the engineering decisions that made it work. The interface captures are evidence of those decisions, not the argument.</p>
+  </header>
+
+  <article class="project-case project-case--study" id="studyos" aria-labelledby="studyos-title">
+    <header class="project-case__header">
+      <div class="project-case__identifier"><span>PROJECT RECORD</span><span>01 <i>/</i> 02</span></div>
+      <p class="eyebrow">Personal learning workspace <span class="eyebrow__divider">/</span> Django</p>
+      <h2 id="studyos-title">StudyOS</h2>
+      <p class="project-case__thesis">A nursing study library is more useful when it becomes a place you can navigate, search, and return to.</p>
+      <p class="case-stack"><span>MY ROLE</span> Built and documented the application <i>·</i> <span>CONTEXT</span> Personal study tool</p>
+      <figure class="project-map project-map--study" aria-label="StudyOS workflow map: subject and unit lead to files, lectures, sources, and notes">
+        <span class="project-map__label">STUDY WORKFLOW</span>
+        <span class="project-map__node">SUBJECT</span><span class="project-map__connector" aria-hidden="true">→</span><span class="project-map__node">UNIT</span><span class="project-map__connector" aria-hidden="true">→</span><span class="project-map__node">MATERIAL</span>
+        <span class="project-map__node project-map__node--secondary">LECTURE</span><span class="project-map__connector" aria-hidden="true">→</span><span class="project-map__node project-map__node--secondary">SOURCES</span><span class="project-map__connector" aria-hidden="true">→</span><span class="project-map__node project-map__node--secondary">NOTES</span>
+        <figcaption>Conceptual map of implemented study and lecture workflows.</figcaption>
+      </figure>
+    </header>
+
+    <div class="project-case__body">
+      <section class="case-section">
+        <p class="case-section__label">01 <span>THE PROBLEM</span></p>
+        <div>
+          <h3>Study material needed a working surface.</h3>
+          <p>I built StudyOS for my own nursing coursework. The material already existed as a subject and file library; the gap was a working surface for browsing it on a laptop or phone on the same local network, and a place to keep notes and study activity alongside it.</p>
+        </div>
+      </section>
+
+      <section class="case-section">
+        <p class="case-section__label">02 <span>WHAT I BUILT</span></p>
+        <div>
+          <h3>A catalog, a reader, and a study layer.</h3>
+          <p>The Django site turns the library into a browsable catalog: subjects and units, search across file and subject names, and document streaming for reading. Around that catalog sit the study tools: notes, bookmarks, progress, a study calendar, session records, and lecture workspaces that collect sources and mind maps.</p>
+          <ul class="case-list">
+            <li>Browse subjects, units, and library files</li>
+            <li>Search by file or subject name, then open the document</li>
+            <li>Keep notes, bookmarks, progress, and session history</li>
+            <li>Group related material into lecture and topic workspaces</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="case-section case-section--decision">
+        <p class="case-section__label">03 <span>ENGINEERING DECISION</span></p>
+        <div>
+          <h3>Keep the source library read-only. Own only the study layer.</h3>
+          <p>The website imports a catalog snapshot into its own SQLite database. Original study files remain read-only in their existing location; the site streams them rather than copying them into the database. That boundary keeps notes, progress, and bookmarks in the application while the documents stay in their existing library.</p>
+          <p>It is a deliberate trade-off: the application owns navigation and study state, not the files themselves.</p>
+          <p class="case-stack"><span>IMPLEMENTATION</span> Django <i>·</i> server-rendered HTML <i>·</i> SQLite <i>·</i> local-first file access</p>
+        </div>
+      </section>
+
+      <section class="case-section" aria-labelledby="studyos-evidence">
+        <p class="case-section__label">04 <span>INTERFACE RECORD</span></p>
+        <div>
+          <h3 id="studyos-evidence">Captured from the working application.</h3>
+          <p>These are actual screens from StudyOS, populated with fictional sample data for the portfolio. They document the browsing and study surfaces described above; the point is the workflow and the catalog boundary behind them, not the surface styling.</p>
+          <figure class="project-shot project-shot--study">
+            <div class="project-shot__grid">
+              <a class="project-shot__image" href="/images/projects/studyos-desktop.png" target="_blank" rel="noopener noreferrer" aria-label="Open the full-size StudyOS dashboard screenshot in a new tab">
+                <img src="/images/projects/studyos-desktop.png" alt="StudyOS dashboard showing the subject library, study activity, and calendar" width="1440" height="1000" loading="lazy" decoding="async" />
+                <span class="project-shot__label">Dashboard — actual capture</span>
+              </a>
+              <a class="project-shot__image project-shot__image--phone" href="/images/projects/studyos-mobile.png" target="_blank" rel="noopener noreferrer" aria-label="Open the full-size StudyOS mobile screenshot in a new tab">
+                <img src="/images/projects/studyos-mobile.png" alt="StudyOS subject library on a mobile screen" width="390" height="844" loading="lazy" decoding="async" />
+                <span class="project-shot__label">Subject library — mobile</span>
+              </a>
+            </div>
+            <figcaption>Actual StudyOS captures with fictional sample subjects and study records. No private study material is shown.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <aside class="project-case__note">
+        <span class="note-rule" aria-hidden="true"></span>
+        <p>Built as a personal local tool. The case study leaves out private study materials, filenames, notes, and database contents.</p>
+      </aside>
+    </div>
+  </article>
+
+  <article class="project-case project-case--installments" id="installment-system" aria-labelledby="installment-title">
+    <header class="project-case__header">
+      <div class="project-case__identifier"><span>PROJECT RECORD</span><span>02 <i>/</i> 02</span></div>
+      <p class="eyebrow">Business operations <span class="eyebrow__divider">/</span> Django 5.2 <span class="eyebrow__divider">/</span> Arabic RTL</p>
+      <h2 id="installment-title">Installment Management System</h2>
+      <p class="project-case__thesis">An installment contract creates a chain of work: define the terms, track each due date, record what was paid, and understand what remains.</p>
+      <p class="case-stack"><span>MY ROLE</span> Built and documented the application <i>·</i> <span>CONTEXT</span> Installment-based business records</p>
+      <figure class="project-map project-map--installments" aria-label="Installment workflow map: contract, schedule, and individual payments">
+        <span class="project-map__label">CONTRACT LIFECYCLE</span>
+        <span class="project-map__node">TERMS</span><span class="project-map__connector" aria-hidden="true">→</span><span class="project-map__node">SCHEDULE</span><span class="project-map__connector" aria-hidden="true">→</span><span class="project-map__node">PAYMENTS</span>
+        <span class="project-map__detail">due amount</span><span class="project-map__detail">dated rows</span><span class="project-map__detail">partial collections</span>
+        <figcaption>Conceptual map based on the system's contract and payment records.</figcaption>
+      </figure>
+    </header>
+
+    <div class="project-case__body">
+      <section class="case-section">
+        <p class="case-section__label">01 <span>THE PROBLEM</span></p>
+        <div>
+          <h3>Keep related records connected.</h3>
+          <p>I built a Django application for organizing installment-based business records. Customers, suppliers, products, purchases, expenses, contracts, installments, and payments are represented as related parts of the same working system. The design problem is keeping what is scheduled separate from what has actually been collected.</p>
+        </div>
+      </section>
+
+      <section class="case-section">
+        <p class="case-section__label">02 <span>IMPLEMENTED WORKFLOW</span></p>
+        <div>
+          <h3>Set the terms, generate the schedule, record each collection.</h3>
+          <p>A contract can be calculated in three ways: derive the rate from an agreed installment and term, derive the installment from the rate and term, or use the configured monthly rate with the term. The resulting contract gets a dated installment schedule. Each collection is stored as its own payment record with its date, method, and receiver, rather than overwriting the scheduled amount.</p>
+          <ul class="case-list">
+            <li>Customer, supplier, product, and purchase records</li>
+            <li>Contract calculations and generated due dates</li>
+            <li>Installment status and separately recorded payments</li>
+            <li>Dashboards and overdue, profit, monthly, investment, and customer reports</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="case-section case-section--decision">
+        <p class="case-section__label">03 <span>ENGINEERING DECISION</span></p>
+        <div>
+          <h3>Preserve the difference between a due amount and a payment.</h3>
+          <p>Installments hold the amount expected on a schedule; payment rows hold individual collection events. That distinction makes partial collections, payment methods, and receiver attribution visible without treating a scheduled amount as money already received. Decimal-based calculation helpers handle the three plan modes, and inputs are validated before the schedule is created.</p>
+          <p class="case-stack"><span>IMPLEMENTATION</span> Django 5.2 <i>·</i> Python <i>·</i> server-rendered HTML <i>·</i> Arabic RTL</p>
+        </div>
+      </section>
+
+      <section class="case-section" aria-labelledby="installment-evidence">
+        <p class="case-section__label">04 <span>INTERFACE RECORD</span></p>
+        <div>
+          <h3 id="installment-evidence">Captured from the working application.</h3>
+          <p>These are actual screens from the Arabic RTL application with fictional sample records. They show the dashboard and contract list as implemented; no customer or business data is included. The engineering claim rests on the contract, schedule, and payment model described above, not on the surface styling.</p>
+          <figure class="project-shot project-shot--installments">
+            <div class="project-shot__grid">
+              <a class="project-shot__image" href="/images/projects/installment-dashboard-desktop.png" target="_blank" rel="noopener noreferrer" aria-label="Open the full-size installment dashboard screenshot in a new tab">
+                <img src="/images/projects/installment-dashboard-desktop.png" alt="Arabic installment system dashboard with sample collection summaries and a fictional sample contract" width="1440" height="1000" loading="lazy" decoding="async" />
+                <span class="project-shot__label">Dashboard — actual capture</span>
+              </a>
+              <a class="project-shot__image" href="/images/projects/installment-contracts-desktop.png" target="_blank" rel="noopener noreferrer" aria-label="Open the full-size installment contracts screenshot in a new tab">
+                <img src="/images/projects/installment-contracts-desktop.png" alt="Arabic contract list showing a fictional sample installment contract" width="1440" height="1000" loading="lazy" decoding="async" />
+                <span class="project-shot__label">Contract workflow — actual capture</span>
+              </a>
+            </div>
+            <figcaption>Actual installment-system captures with fictional sample records; no customer or business data is shown.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <aside class="project-case__note">
+        <span class="note-rule" aria-hidden="true"></span>
+        <p>This is a software project description based on implemented source. It makes no claims about production use, customer outcomes, or financial performance.</p>
+      </aside>
+    </div>
+  </article>
+
+  <p class="projects-back"><a class="text-link" href="/">Return to the portfolio <span aria-hidden="true">↗</span></a></p>
+</Base>

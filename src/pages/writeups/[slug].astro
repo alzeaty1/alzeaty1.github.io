@@ -27,9 +27,11 @@ const children = appendicesFor(entry.id, appendices);
 const scripts = scriptsFor(entry.id);
 ---
 
-<Base title={`${entry.data.title} — Ahmed Abdalrhman`} description={entry.data.vulnClass ?? entry.data.title} wide>
+<Base title={`${entry.data.title} — ALZeaty`} description={entry.data.vulnClass ?? entry.data.title} wide>
+  <p class="record-breadcrumb"><a href="/writeups/">Investigations</a><span aria-hidden="true">/</span><span>Lab record</span></p>
   <article>
     <header class="writeup__head">
+      <p class="eyebrow writeup__eyebrow"><span class="eyebrow__tick" aria-hidden="true"></span> Investigation <span class="eyebrow__divider">/</span> {entry.data.platform ?? 'Lab work'}</p>
       {
         isAppendix && parent && (
           <p class="entry__meta">
@@ -37,7 +39,7 @@ const scripts = scriptsFor(entry.id);
           </p>
         )
       }
-      <h1>{entry.data.title}</h1>
+      <h1 class="writeup__title">{entry.data.title}</h1>
 
       <dl class="metastrip">
         {
@@ -77,8 +79,8 @@ const scripts = scriptsFor(entry.id);
 
     {
       sections.length > 1 && (
-        <details class="toc" open>
-          <summary class="toc__label">On this page</summary>
+      <details class="toc" open>
+          <summary class="toc__label">Sections in this record</summary>
           <ul class="toc__list">
             {sections.map((h) => (
               <li><a href={`#${h.slug}`}>{h.text}</a></li>
@@ -98,7 +100,7 @@ const scripts = scriptsFor(entry.id);
       // so a keyboard reader can pan them. Boxes that fit are left alone, so
       // short code spans never turn into tab stops.
       const boxes = Array.from(
-        document.querySelectorAll('.prose__scroll'),
+        document.querySelectorAll<HTMLElement>('.prose__scroll'),
       );
       let anyScrollable = false;
 
@@ -133,7 +135,7 @@ const scripts = scriptsFor(entry.id);
         note.innerHTML =
           'Wide tables and long code spans scroll sideways. ' +
           'They are kept on one line on purpose &mdash; nothing here is re-wrapped.';
-        document.querySelector('.prose').append(note);
+        document.querySelector('.prose')?.append(note);
       }
     </script>
 
@@ -170,7 +172,7 @@ const scripts = scriptsFor(entry.id);
     }
   </article>
 
-  <nav class="pager" aria-label="Writeup navigation">
+  <nav class="pager" aria-label="Investigation navigation">
     {prev ? <a href={`/writeups/${prev.id}/`}>&larr; {prev.data.title}</a> : <span />}
     {next ? <a href={`/writeups/${next.id}/`}>{next.data.title} &rarr;</a> : <span />}
   </nav>

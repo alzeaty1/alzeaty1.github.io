@@ -1,0 +1,33 @@
+<figure class="investigation-graphic" aria-labelledby="investigation-graphic-caption">
+  <svg class="investigation-map" viewBox="0 0 520 420" role="img" aria-labelledby="investigation-map-title investigation-map-description">
+    <title id="investigation-map-title">A web security investigation map</title>
+    <desc id="investigation-map-description">A request moves through observation, hypothesis, testing, and evidence.</desc>
+    <defs>
+      <pattern id="map-grid" width="26" height="26" patternUnits="userSpaceOnUse">
+        <path d="M 26 0 L 0 0 0 26" fill="none" stroke="#748cab" stroke-opacity=".18" stroke-width=".7" />
+      </pattern>
+    </defs>
+    <path class="map-frame" d="M18 18h484v384H18z" />
+    <path class="map-grid-fill" d="M19 19h482v382H19z" />
+    <path class="map-axis" d="M260 52v316M68 210h384" />
+    <path class="map-route" d="M110 110 C170 110 188 174 260 210 S350 310 410 310" />
+    <path class="map-route map-route--secondary" d="M410 110 C350 110 332 174 260 210 S170 310 110 310" />
+    <path class="map-trace" d="M110 110 C170 110 188 174 260 210 S350 310 410 310" />
+    <circle class="map-node map-node--main" cx="260" cy="210" r="8" />
+    <circle class="map-node map-node--pulse" cx="260" cy="210" r="18" />
+    <circle class="map-node" cx="110" cy="110" r="5" />
+    <circle class="map-node" cx="410" cy="110" r="5" />
+    <circle class="map-node" cx="110" cy="310" r="5" />
+    <circle class="map-node" cx="410" cy="310" r="5" />
+    <text class="map-label map-label--top" x="260" y="76" text-anchor="middle">REQUEST IN</text>
+    <text class="map-label" x="110" y="96" text-anchor="middle">OBSERVE</text>
+    <text class="map-label" x="410" y="96" text-anchor="middle">HYPOTHESIS</text>
+    <text class="map-label" x="110" y="344" text-anchor="middle">TEST</text>
+    <text class="map-label" x="410" y="344" text-anchor="middle">EVIDENCE</text>
+    <text class="map-center" x="260" y="205" text-anchor="middle">TRACE</text>
+    <text class="map-center map-center--sub" x="260" y="224" text-anchor="middle">THE BEHAVIOR</text>
+    <text class="map-coordinate" x="34" y="390">FIELD MAP / 01</text>
+    <text class="map-coordinate" x="486" y="390" text-anchor="end">ALZ / WEB</text>
+  </svg>
+  <figcaption id="investigation-graphic-caption">My approach: follow what the application does, then test what the evidence supports.</figcaption>
+</figure>
